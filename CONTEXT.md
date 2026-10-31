@@ -5,7 +5,7 @@
 ## Language
 
 **Requirement Ticket**:
-使用者在 eCIM 系統提出的 AI agent 需求單，以需求單號識別；Studio 內以該單號串起後續所有成品。由一位 CIM Engineer 建單並負責（可改派），綁定一位 Business User。
+使用者在 eCIM 系統提出的 AI agent 需求單，以需求單號識別；Studio 內以該單號串起後續所有成品。由一位 CIM Engineer 建單並負責（可改派），綁定一位 Business User；建單時貼上需求描述。
 _Avoid_: 工單、case
 
 **CIM Engineer**:
@@ -21,7 +21,7 @@ _Avoid_: 客戶、end user
 _Avoid_: 管理員、維運
 
 **Interview**:
-CIM Engineer 與 agent 以 grill 方式逐題追問，釐清一張 Requirement Ticket 的需求，直到產出 Workflow Definition 與 Tool Spec 的一次協作。
+CIM Engineer 與 agent 以 grill 方式逐題追問（Business User 不直接與 agent 對話，由 CIM Engineer 轉述），釐清一張 Requirement Ticket 的需求，直到產出 Workflow Definition 與 Tool Spec 的一次協作。
 _Avoid_: 問卷、chat
 
 **Workflow Definition**:
