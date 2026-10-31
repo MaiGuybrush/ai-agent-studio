@@ -17,7 +17,7 @@ _Avoid_: 開發者、IT
 _Avoid_: 客戶、end user
 
 **System Owner**:
-某個 MCP 工具所涉及系統的負責人；對該工具做 Feasibility Review。
+某個系統的負責人，由 Studio 系統設定的系統對照表指定；對該系統的 Tool Spec 做 Feasibility Review，可轉派給他人，但不能修改 Tool Spec。
 _Avoid_: 管理員、維運
 
 **Interview**:
@@ -53,7 +53,7 @@ _Avoid_: lint、驗證
 _Avoid_: 自訂詞彙、Tier 2
 
 **Feasibility Review**:
-System Owner 對單一 Tool Spec 回覆的評估，結果為可行、不可行或附條件，並記錄原因與預估工時。
+System Owner 對單一 Tool Spec Revision 回覆的評估，結果為可行、不可行或附條件，並記錄原因、條件與預估工時（人日）；CIM Engineer 處理前可修改。
 _Avoid_: 審核、簽核
 
 **Skill**:
