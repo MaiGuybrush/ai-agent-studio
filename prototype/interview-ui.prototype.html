@@ -1,0 +1,334 @@
+<!doctype html>
+<!--
+  PROTOTYPE — 丟棄式。回答〈原型：訪談協作介面〉(#10)：訪談頁面該長什麼樣子？
+  三種版面以 ?variant=A|B|C 切換（底部浮動列，或鍵盤 ← →）。資料全在記憶體，重新整理即重置。
+  未用 Angular：repo 尚無前端專案，先判斷版面結構；定案後在部門 template 重寫。
+-->
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>訪談協作介面原型</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 "Microsoft JhengHei", system-ui, sans-serif; background: #f3f4f6; color: #1f2937; }
+  header.app { background: #1e3a5f; color: #fff; padding: 8px 16px; display: flex; gap: 16px; align-items: center; }
+  header.app b { font-size: 15px; }
+  header.app span { opacity: .7; font-size: 12px; }
+  button { font: inherit; cursor: pointer; border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; padding: 3px 10px; }
+  button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  input, textarea, select { font: inherit; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 6px; }
+  .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; }
+  .muted { color: #6b7280; font-size: 12px; }
+  .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 10px; border: 1px solid; white-space: nowrap; }
+  .k-Reuse { color: #047857; border-color: #6ee7b7; background: #ecfdf5; }
+  .k-Extend { color: #b45309; border-color: #fcd34d; background: #fffbeb; }
+  .k-New { color: #7c3aed; border-color: #c4b5fd; background: #f5f3ff; }
+  .nc-pass { color: #047857; } .nc-rename { color: #b45309; } .nc-new { color: #dc2626; } .nc-pending { color: #2563eb; }
+  .st { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: #e5e7eb; white-space: nowrap; }
+  .st-可行, .st-已實作, .st-已完成 { background: #d1fae5; color: #065f46; }
+  .st-附條件 { background: #fef3c7; color: #92400e; }
+  .st-不可行 { background: #fee2e2; color: #991b1b; }
+  .st-待評估, .st-評估中, .st-實作中 { background: #dbeafe; color: #1e40af; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { text-align: left; padding: 3px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  th { font-weight: normal; color: #6b7280; font-size: 12px; }
+  .chat { display: flex; flex-direction: column; min-height: 0; }
+  .msgs { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .msg { max-width: 85%; padding: 6px 10px; border-radius: 8px; white-space: pre-wrap; }
+  .msg.agent { background: #f1f5f9; align-self: flex-start; }
+  .msg.me { background: #dbeafe; align-self: flex-end; }
+  .msg.sys { align-self: center; font-size: 12px; color: #6b7280; background: none; }
+  .chat form { display: flex; gap: 6px; padding: 8px; border-top: 1px solid #e5e7eb; }
+  .chat form input { flex: 1; }
+  .stages { display: flex; gap: 4px; flex-wrap: wrap; }
+  .stage { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #e5e7eb; color: #6b7280; }
+  .stage.done { background: #d1fae5; color: #065f46; }
+  .stage.cur { background: #2563eb; color: #fff; }
+  .blockers { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #991b1b; }
+  .blockers ul { margin: 2px 0 0; padding-left: 18px; }
+  .ok { background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #065f46; }
+  h3 { margin: 0 0 6px; font-size: 14px; }
+  .edited { border-left: 3px solid #f59e0b; padding-left: 4px; }
+
+  /* Variant A：三欄 */
+  .A { display: grid; grid-template-columns: 260px 1fr 460px; gap: 10px; padding: 10px; height: calc(100vh - 42px - 56px); }
+  .A > * { overflow: auto; min-height: 0; }
+  .A .tabs button.on { background: #1e3a5f; color: #fff; }
+
+  /* Variant B：文件為主、對話抽屜 */
+  .B { max-width: 980px; margin: 0 auto; padding: 12px 12px 120px; }
+  .B .step { display: grid; grid-template-columns: 32px 1fr; gap: 8px; padding: 10px; margin-bottom: 8px; }
+  .B .step .no { font-size: 20px; color: #94a3b8; }
+  .B .spec { margin-top: 6px; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 8px; background: #fafafa; }
+  .drawer { position: fixed; right: 16px; bottom: 64px; width: 380px; height: 60vh; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+  .drawer.closed { height: auto; }
+  .drawer.closed .msgs, .drawer.closed form { display: none; }
+  .drawer .head { padding: 6px 10px; background: #1e3a5f; color: #fff; border-radius: 6px 6px 0 0; display: flex; justify-content: space-between; cursor: pointer; }
+
+  /* Variant C：依階段聚焦 */
+  .C { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 10px; padding: 10px; height: calc(100vh - 42px - 56px); }
+  .C .top { grid-column: 1 / 3; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .C > .chat, .C > .focus { min-height: 0; overflow: auto; }
+  .C .stage { cursor: pointer; }
+
+  /* 原型切換列（不屬於設計） */
+  #switcher { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); background: #111; color: #fff; border-radius: 999px; padding: 6px 10px; display: flex; gap: 8px; align-items: center; box-shadow: 0 4px 14px rgba(0,0,0,.35); z-index: 99; font-size: 13px; }
+  #switcher button { background: #333; color: #fff; border: none; border-radius: 999px; }
+  #switcher .sep { opacity: .4; }
+  dialog { border: 1px solid #cbd5e1; border-radius: 8px; width: 420px; }
+  dialog textarea { width: 100%; height: 70px; }
+</style>
+</head>
+<body>
+<header class="app"><b>AI Agent Studio</b><span>需求單 / eCIM-2026-0412</span><span style="margin-left:auto">王小明（CIM Engineer）</span></header>
+<div id="root"></div>
+
+<dialog id="dlg"><form method="dialog">
+  <h3 id="dlgTitle"></h3><p class="muted" id="dlgHint"></p>
+  <textarea id="dlgText" required></textarea>
+  <p style="text-align:right;margin:8px 0 0"><button value="cancel" formnovalidate>取消</button> <button class="primary" value="ok">確定</button></p>
+</form></dialog>
+
+<div id="switcher">
+  <button id="prev">◀</button><span id="vlabel"></span><button id="next">▶</button>
+  <span class="sep">|</span><span>模擬：</span>
+  <button id="simSubmit">送出結果回來</button><button id="simDone">全部已實作</button><button id="simReset">重置</button>
+</div>
+
+<script>
+const STAGES = ['任務目標與觸發', '列出步驟', '對照現有工具', '補欄位與副作用', 'Naming Check／System Owner', '總結送出'];
+const VARIANTS = { A: '三欄（清單｜對話｜草稿）', B: '文件為主、對話抽屜', C: '依階段聚焦' };
+
+function initialState() {
+  return {
+    ticket: { no: 'eCIM-2026-0412', title: '每日機台異常彙整', cim: '王小明', bu: '陳美玲（設備課）', status: '訪談中', desc: '每天早上要把前一天 PHOTO 區機台異常事件整理成表，寄給課長，並對超過 2 小時的停機開 eCIM 追蹤單。' },
+    stage: 4,
+    viewStage: 4,
+    steps: [
+      { desc: '查詢前一天 PHOTO 區機台異常事件', spec: 'ts1', input: '使用者輸入：日期、區域', output: 'events[]', approval: false },
+      { desc: '依停機時間篩選超過 2 小時的事件', spec: null, input: '步驟 1：events[].downtime_minutes', output: 'long_events[]', approval: false },
+      { desc: '為每筆長停機開 eCIM 追蹤單', spec: 'ts2', input: '步驟 2：long_events[]', output: 'ticket_no', approval: true },
+      { desc: '彙整成表並寄給課長', spec: 'ts3', input: '步驟 1：events[]', output: '寄送結果', approval: false },
+    ],
+    specs: {
+      ts1: { name: 'cim_eap_query_alarm_events', kind: 'Extend', system: 'EAP', owner: '林志豪', side: '唯讀', ref: 'eap-gateway / cim_eap_query_alarms', review: null,
+        fields: [
+          { dir: 'in', name: 'area', type: 'string', nc: 'pass' },
+          { dir: 'in', name: 'eqpId', type: 'string', nc: 'rename', std: 'equipment_id' },
+          { dir: 'out', name: 'downtime_minutes', type: 'integer', nc: 'new', edited: true },
+          { dir: 'out', name: 'alarm_code', type: 'string', nc: 'pass' },
+        ] },
+      ts2: { name: 'cim_ecim_create_tracking_ticket', kind: 'New', system: 'eCIM', owner: '', side: '寫入', review: null,
+        fields: [
+          { dir: 'in', name: 'equipment_id', type: 'string', nc: 'pass' },
+          { dir: 'in', name: 'issue_desc', type: 'string', nc: 'rename', std: 'description' },
+          { dir: 'out', name: 'ticket_no', type: 'string', nc: 'pass' },
+        ] },
+      ts3: { name: 'cim_mail_send', kind: 'Reuse', system: 'Mail', owner: '', side: '寫入', ref: 'common-gateway / cim_mail_send', review: null,
+        fields: [ { dir: 'in', name: 'to', type: 'array', nc: 'pass' }, { dir: 'in', name: 'body', type: 'string', nc: 'pass' } ] },
+    },
+    msgs: [
+      { who: 'sys', text: '對話開始 · 已讀取需求描述' },
+      { who: 'agent', text: '先確認觸發：每天早上幾點跑？還是陳美玲上班時手動觸發？' },
+      { who: 'me', text: '她說每天 8 點前手動跑就好。' },
+      { who: 'agent', text: '了解。我在 MCP Server List 找到 eap-gateway 的 cim_eap_query_alarms，但沒有停機時間，建議 Extend，新增 output 欄位 downtime_minutes。' },
+      { who: 'agent', text: '欄位 downtime_minutes 在 Tier1Vocabulary 查無，標為新名詞；eqpId 命中別名，標準名是 equipment_id。eCIM 追蹤單工具需要指定 System Owner，對照表沒有 eCIM 的負責人，請你確認。' },
+      { who: 'sys', text: '王小明手動修改：downtime_minutes 型別 number → integer（agent 不會覆寫）' },
+    ],
+    drawerOpen: true,
+    tabA: 'workflow',
+  };
+}
+let S = initialState();
+
+// ---------- 規則 ----------
+function blockers() {
+  const out = [];
+  for (const [id, sp] of Object.entries(S.specs)) {
+    if (sp.kind !== 'Reuse' && !sp.owner) out.push(`${sp.name}：未指定 System Owner`);
+    for (const f of sp.fields) {
+      if (f.nc === 'new') out.push(`${sp.name}.${f.name}：新名詞未確認`);
+      if (f.nc === 'rename' && !f.reason) out.push(`${sp.name}.${f.name}：建議改為 ${f.std}，請改名或填理由`);
+    }
+  }
+  return out;
+}
+function specStatus(sp) {
+  if (sp.kind === 'Reuse') return S.ticket.status === '訪談中' ? '草稿' : '已實作';
+  if (S.ticket.status === '訪談中') return '草稿';
+  return sp.review?.status ?? '待評估';
+}
+function deriveTicket() {
+  if (S.ticket.status === '訪談中' || S.ticket.status === '已取消') return S.ticket.status;
+  const st = Object.values(S.specs).map(specStatus);
+  if (st.every(s => s === '已實作')) return '已完成';
+  if (st.some(s => s === '實作中' || s === '已實作')) return '實作中';
+  return '評估中';
+}
+
+// ---------- 操作 ----------
+function act(e) {
+  const t = e.target.closest('[data-act]'); if (!t) return;
+  const { act: a, spec, i } = t.dataset; const f = spec && S.specs[spec].fields[+i];
+  if (a === 'rename') { f.name = f.std; f.nc = 'pass'; delete f.reason; addSys(`王小明將欄位改為標準名稱 ${f.std}`); }
+  if (a === 'reason') ask('不改名的理由', `建議 ${f.std}，理由會記在欄位上`, r => { f.reason = r; render(); });
+  if (a === 'confirm') ask(`確認新名詞 ${f.name}`, '填寫說明；確認後開 Gitea vocabulary-proposal issue，成為 Pending Term', r => { f.nc = 'pending'; f.note = r; addSys(`已開 Gitea issue：vocabulary-proposal「${f.name}」`); render(); });
+  if (a === 'owner') { S.specs[spec].owner = t.value; render(); }
+  if (a === 'submit') { S.ticket.status = '評估中'; S.stage = 6; addSys('已送出 Interview · submission #1 · Tool Spec Revision 已凍結'); }
+  if (a === 'copy') { navigator.clipboard?.writeText(markdown()); alert('已複製 Markdown：\n\n' + markdown()); }
+  if (a === 'tab') S.tabA = t.dataset.tab;
+  if (a === 'drawer') S.drawerOpen = !S.drawerOpen;
+  if (a === 'viewStage') S.viewStage = +t.dataset.n;
+  if (a !== 'reason' && a !== 'confirm' && a !== 'owner') render();
+}
+document.addEventListener('click', act);
+document.addEventListener('change', e => { if (e.target.dataset.act === 'owner') act(e); });
+document.addEventListener('submit', e => {
+  if (!e.target.classList.contains('say')) return;
+  e.preventDefault(); const v = e.target.q.value.trim(); if (!v) return;
+  S.msgs.push({ who: 'me', text: v }, { who: 'agent', text: '（原型：agent 回覆會在這裡串流，並同步更新右側草稿）' }); render();
+});
+function addSys(text) { S.msgs.push({ who: 'sys', text }); }
+function ask(title, hint, cb) {
+  const d = document.getElementById('dlg'); dlgTitle.textContent = title; dlgHint.textContent = hint; dlgText.value = '';
+  d.onclose = () => { if (d.returnValue === 'ok' && dlgText.value.trim()) cb(dlgText.value.trim()); }; d.showModal();
+}
+function markdown() {
+  return `# ${S.ticket.no} ${S.ticket.title}\n\n` + S.steps.map((s, n) => {
+    const sp = s.spec && S.specs[s.spec];
+    return `${n + 1}. ${s.desc}${sp ? `\n   - 工具：\`${(sp.ref || 'new-server / ' + sp.name).split(' / ')[0]}\` / \`${sp.name}\`` : '\n   - 人工步驟'}\n   - 輸入：${s.input}\n   - 輸出：${s.output}${s.approval ? '\n   - 需人工核准' : ''}`;
+  }).join('\n');
+}
+
+// ---------- 共用片段 ----------
+const NC = { pass: '✓ 通過', rename: '⚠ 建議改名', new: '✱ 新名詞', pending: '◷ Pending Term' };
+function fieldRow(id, f, i) {
+  const locked = S.ticket.status !== '訪談中';
+  let actions = '';
+  if (!locked && f.nc === 'rename') actions = f.reason ? `<span class="muted">理由：${f.reason}</span>` : `<button data-act="rename" data-spec="${id}" data-i="${i}">改為 ${f.std}</button> <button data-act="reason" data-spec="${id}" data-i="${i}">不改，填理由</button>`;
+  if (!locked && f.nc === 'new') actions = `<button data-act="confirm" data-spec="${id}" data-i="${i}">確認新名詞…</button>`;
+  return `<tr><td>${f.dir === 'in' ? 'in' : 'out'}</td><td class="${f.edited ? 'edited' : ''}" title="${f.edited ? '人工修改過' : ''}"><code>${f.name}</code></td><td>${f.type}</td><td class="nc-${f.nc}">${NC[f.nc]}</td><td>${actions}</td></tr>`;
+}
+function specCard(id, compact) {
+  const sp = S.specs[id], locked = S.ticket.status !== '訪談中';
+  const owner = sp.kind === 'Reuse' ? '<span class="muted">Reuse 免評估</span>'
+    : locked ? sp.owner : `<select data-act="owner" data-spec="${id}"><option value="">— 選擇 System Owner —</option>${['林志豪', '黃雅婷', '張家銘'].map(o => `<option ${o === sp.owner ? 'selected' : ''}>${o}</option>`).join('')}</select>${sp.system === 'EAP' ? ' <span class="muted">agent 建議</span>' : ''}`;
+  const st = specStatus(sp);
+  const rv = sp.review ? `<div class="muted">評估：${sp.review.status}${sp.review.days ? ` · ${sp.review.days} 人日` : ''}${sp.review.reason ? ` · ${sp.review.reason}` : ''}</div>` : '';
+  return `<div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><code><b>${sp.name}</b></code><span class="tag k-${sp.kind}">${sp.kind}</span><span class="st st-${st}">${st}</span></div>
+    <div class="muted">${sp.system} · ${sp.side}${sp.ref ? ` · 參照 ${sp.ref}` : ''}</div>
+    <div style="margin:4px 0">System Owner：${owner}</div>${rv}
+    ${compact ? '' : `<table><tr><th></th><th>欄位</th><th>型別</th><th>Naming Check</th><th></th></tr>${sp.fields.map((f, i) => fieldRow(id, f, i)).join('')}</table>`}</div>`;
+}
+function stepLine(s, n) {
+  const sp = s.spec && S.specs[s.spec];
+  return `<b>${n + 1}. ${s.desc}</b>${s.approval ? ' <span class="tag" style="color:#b91c1c;border-color:#fca5a5">需人工核准</span>' : ''}
+    <div class="muted">工具：${sp ? `<code>${sp.name}</code> <span class="tag k-${sp.kind}">${sp.kind}</span>` : '人工步驟'} · 輸入：${s.input} · 輸出：${s.output}</div>`;
+}
+function chatHtml(extraCls = '') {
+  return `<div class="chat ${extraCls}"><div class="msgs">${S.msgs.map(m => `<div class="msg ${m.who}">${m.text}</div>`).join('')}</div>
+    <form class="say"><input name="q" placeholder="${S.ticket.status === '訪談中' ? '轉述 Business User 的說明…' : 'Interview 已送出（重開才能繼續）'}" ${S.ticket.status === '訪談中' ? '' : 'disabled'}><button class="primary">送出</button></form></div>`;
+}
+function stagesHtml(clickable) {
+  return `<div class="stages">${STAGES.map((s, i) => `<span class="stage ${i + 1 < S.stage ? 'done' : i + 1 === S.stage ? 'cur' : ''}" ${clickable ? `data-act="viewStage" data-n="${i + 1}"` : ''} style="${clickable && S.viewStage === i + 1 ? 'outline:2px solid #1e3a5f' : ''}">${i + 1} ${s}</span>`).join('')}</div>`;
+}
+function submitBox() {
+  const t = deriveTicket();
+  if (t === '已完成') return `<div class="ok">全部 Tool Spec 已實作，需求單已完成（已 email 通知 Business User 與 CIM Engineer）。<br><button class="primary" data-act="copy">複製為 Markdown</button> <span class="muted">貼到 Cloud Agent Platform 的 skill 開發工具</span></div>`;
+  if (t !== '訪談中') return `<div class="muted">已送出 · 需求單狀態 <span class="st st-${t}">${t}</span> <button data-act="copy">複製為 Markdown</button></div>`;
+  const b = blockers();
+  return b.length ? `<div class="blockers"><b>還不能送出（${b.length}）</b><ul>${b.map(x => `<li>${x}</li>`).join('')}</ul></div><button class="primary" disabled>送出 Interview</button>`
+    : `<div class="ok">檢查全部通過</div><button class="primary" data-act="submit">送出 Interview</button>`;
+}
+function ticketInfo() {
+  const t = deriveTicket();
+  return `<h3>${S.ticket.no}</h3><div>${S.ticket.title}</div><div style="margin:6px 0"><span class="st st-${t}">${t}</span></div>
+    <div class="muted">CIM Engineer：${S.ticket.cim}<br>Business User：${S.ticket.bu}</div>`;
+}
+function reviewTable() {
+  return `<table><tr><th>Tool Spec</th><th>Kind</th><th>System Owner</th><th>狀態</th></tr>${Object.values(S.specs).map(sp => {
+    const st = specStatus(sp); return `<tr><td><code>${sp.name}</code></td><td><span class="tag k-${sp.kind}">${sp.kind}</span></td><td>${sp.owner || '—'}</td><td><span class="st st-${st}">${st}</span></td></tr>`;
+  }).join('')}</table>`;
+}
+
+// ---------- Variant A：三欄 ----------
+function VariantA() {
+  const tab = S.tabA;
+  const body = tab === 'workflow' ? S.steps.map((s, n) => `<div style="padding:6px 0;border-bottom:1px solid #f1f5f9">${stepLine(s, n)}</div>`).join('')
+    : tab === 'specs' ? Object.keys(S.specs).map(id => `<div style="padding:8px 0;border-bottom:1px solid #e5e7eb">${specCard(id)}</div>`).join('')
+    : reviewTable();
+  return `<div class="A">
+    <div class="panel" style="padding:10px">${ticketInfo()}<hr><h3>需求描述</h3><div class="muted">${S.ticket.desc}</div><hr><h3>訪談階段</h3>
+      ${STAGES.map((s, i) => `<div class="${i + 1 === S.stage ? 'nc-pending' : i + 1 < S.stage ? 'nc-pass' : 'muted'}">${i + 1 < S.stage ? '✓' : i + 1 === S.stage ? '▶' : '○'} ${s}</div>`).join('')}</div>
+    ${chatHtml('panel')}
+    <div class="panel" style="padding:10px;display:flex;flex-direction:column;gap:8px">
+      <div class="tabs"><button data-act="tab" data-tab="workflow" class="${tab === 'workflow' ? 'on' : ''}">Workflow Definition</button> <button data-act="tab" data-tab="specs" class="${tab === 'specs' ? 'on' : ''}">Tool Spec（${Object.keys(S.specs).length}）</button> <button data-act="tab" data-tab="review" class="${tab === 'review' ? 'on' : ''}">評估進度</button></div>
+      <div style="flex:1;overflow:auto">${body}</div>${submitBox()}</div>
+  </div>`;
+}
+
+// ---------- Variant B：文件為主 ----------
+function VariantB() {
+  return `<div class="B">
+    <div class="panel" style="padding:10px 14px;margin-bottom:10px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+      <div>${ticketInfo()}</div><div style="flex:1;min-width:300px"><div class="muted">${S.ticket.desc}</div><div style="margin-top:6px">${stagesHtml(false)}</div></div></div>
+    <h3>Workflow Definition</h3>
+    ${S.steps.map((s, n) => `<div class="panel step"><div class="no">${n + 1}</div><div>${stepLine(s, n)}${s.spec ? `<div class="spec">${specCard(s.spec)}</div>` : ''}</div></div>`).join('')}
+    <div class="panel" style="padding:10px;margin-top:10px">${submitBox()}</div>
+  </div>
+  <div class="drawer panel chat ${S.drawerOpen ? '' : 'closed'}"><div class="head" data-act="drawer"><span>與 agent 對話</span><span>${S.drawerOpen ? '▾' : '▴'}</span></div>${chatHtml().replace(/^<div class="chat ">|<\/div>$/g, '')}</div>`;
+}
+
+// ---------- Variant C：依階段聚焦 ----------
+function VariantC() {
+  const v = S.viewStage, b = blockers();
+  let focus;
+  if (S.ticket.status !== '訪談中') focus = `<h3>評估與實作進度</h3>${reviewTable()}<div style="margin-top:10px">${submitBox()}</div>`;
+  else if (v === 1) focus = `<h3>任務目標與觸發</h3><p>${S.ticket.desc}</p><p class="muted">觸發：每天 8 點前由 Business User 手動執行</p>`;
+  else if (v === 2) focus = `<h3>步驟</h3>${S.steps.map((s, n) => `<div style="padding:6px 0">${stepLine(s, n)}</div>`).join('')}`;
+  else if (v === 3) focus = `<h3>對照現有工具</h3><table><tr><th>步驟</th><th>判斷</th><th>參照</th></tr>${S.steps.map((s, n) => { const sp = s.spec && S.specs[s.spec]; return `<tr><td>${n + 1}. ${s.desc}</td><td>${sp ? `<span class="tag k-${sp.kind}">${sp.kind}</span>` : '人工'}</td><td class="muted">${sp?.ref || (sp ? '—' : '')}</td></tr>`; }).join('')}</table>`;
+  else if (v === 4) focus = `<h3>欄位與副作用</h3>${Object.keys(S.specs).filter(id => S.specs[id].kind !== 'Reuse').map(id => `<div style="padding:8px 0;border-bottom:1px solid #e5e7eb">${specCard(id)}</div>`).join('')}`;
+  else if (v === 5) focus = `<h3>Naming Check 與 System Owner</h3>${b.length ? `<div class="blockers"><b>待處理（${b.length}）</b><ul>${b.map(x => `<li>${x}</li>`).join('')}</ul></div>` : '<div class="ok">全部處理完</div>'}${Object.keys(S.specs).map(id => `<div style="padding:8px 0;border-bottom:1px solid #e5e7eb">${specCard(id)}</div>`).join('')}`;
+  else focus = `<h3>總結</h3>${S.steps.map((s, n) => `<div style="padding:4px 0">${stepLine(s, n)}</div>`).join('')}<div style="margin-top:10px">${submitBox()}</div>`;
+  return `<div class="C">
+    <div class="panel top"><div style="display:flex;gap:16px;align-items:center"><b>${S.ticket.no} ${S.ticket.title}</b><span class="st st-${deriveTicket()}">${deriveTicket()}</span><span class="muted">CIM Engineer ${S.ticket.cim} · Business User ${S.ticket.bu}</span>
+      <span style="margin-left:auto" class="${b.length ? 'nc-new' : 'nc-pass'}">${S.ticket.status === '訪談中' ? (b.length ? `送出前待處理 ${b.length} 項` : '可以送出') : ''}</span></div>
+      ${stagesHtml(true)}<div class="muted">點階段可回看；agent 目前在第 ${S.stage} 階段</div></div>
+    ${chatHtml('panel')}
+    <div class="panel focus" style="padding:12px">${focus}</div>
+  </div>`;
+}
+
+// ---------- 切換 ----------
+const keys = Object.keys(VARIANTS);
+function cur() { const v = new URLSearchParams(location.search).get('variant'); return keys.includes(v) ? v : 'A'; }
+function go(d) { const v = keys[(keys.indexOf(cur()) + d + keys.length) % keys.length]; history.replaceState(null, '', '?variant=' + v); render(); }
+function render() {
+  const v = cur();
+  root.innerHTML = { A: VariantA, B: VariantB, C: VariantC }[v]();
+  vlabel.textContent = `${v} — ${VARIANTS[v]}`;
+  document.querySelectorAll('.msgs').forEach(m => m.scrollTop = m.scrollHeight);
+}
+prev.onclick = () => go(-1); next.onclick = () => go(1);
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input,textarea,select,[contenteditable]')) return;
+  if (e.key === 'ArrowLeft') go(-1); if (e.key === 'ArrowRight') go(1);
+});
+simSubmit.onclick = () => {
+  if (S.ticket.status === '訪談中') { S.ticket.status = '評估中'; S.stage = 6; S.specs.ts2.owner ||= '黃雅婷'; }
+  S.specs.ts1.review = { status: '附條件', days: 3, reason: '需 EAP 端新增停機時間欄位' };
+  S.specs.ts2.review = { status: '可行', days: 5 };
+  addSys('System Owner 已回覆 Feasibility Review'); render();
+};
+simDone.onclick = () => {
+  if (S.ticket.status === '訪談中') S.ticket.status = '評估中';
+  for (const sp of Object.values(S.specs)) if (sp.kind !== 'Reuse') sp.review = { ...(sp.review || {}), status: '已實作' };
+  render();
+};
+simReset.onclick = () => { S = initialState(); render(); };
+render();
+</script>
+</body>
+</html>
