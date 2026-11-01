@@ -57,18 +57,15 @@ System Owner 對單一 Tool Spec Revision 回覆的評估，結果為可行、�
 _Avoid_: 審核、簽核
 
 **Skill**:
-Business User 撰寫的任務說明，指示雲端 agent 如何使用 MCP 工具完成 Workflow Definition。
+Business User 撰寫的任務說明，指示雲端 agent 如何使用 MCP 工具完成 Workflow Definition；在 Cloud Agent Platform 上撰寫與註冊，不在 Studio 內產出。
 _Avoid_: prompt、腳本
 
-**Skill Authoring**:
-Business User 與 agent 在 Studio 協作產出 Skill 的過程；僅在所有 Tool Spec 實作完成後進行。
-
 **Cloud Agent Platform**:
-公司的雲端 agent 平台；Skill 與 MCP 工具完成後在此手動註冊才能使用，不在 Studio 範圍內。
+公司的雲端 agent 平台；Skill 在此撰寫，Skill 與 MCP 工具在此手動註冊才能使用，不在 Studio 範圍內。
 _Avoid_: 正式環境
 
 **Requirement Ticket Status**:
-Requirement Ticket 的進度；除「訪談中」「已取消」「已完成」由人觸發外，其餘由所屬 Tool Spec 的狀態推導。
+Requirement Ticket 的進度；除「訪談中」「已取消」由人觸發外，其餘由所屬 Tool Spec 的狀態推導——全部 Tool Spec 已實作即為「已完成」。
 _Avoid_: 工單狀態
 
 **Cancellation**:
