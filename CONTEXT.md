@@ -1,6 +1,6 @@
 # AI Agent Studio
 
-工廠 CIM 部門的內部網站：CIM 工程師與使用者在此與 agent 協作，把使用者的日常工作流程轉成「MCP 工具規格」與「skills」，供公司雲端 agent 平台註冊使用。
+工廠 CIM 部門的內部網站：CIM 工程師與 agent 協作訪談使用者，把日常工作流程轉成「MCP 工具規格」並追蹤評估與實作；skills 由使用者在公司雲端 agent 平台上撰寫。
 
 ## Language
 
