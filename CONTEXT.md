@@ -9,11 +9,11 @@
 _Avoid_: 工單、case
 
 **CIM Engineer**:
-被指派訪談使用者、開發 MCP 工具的 CIM 工程師；在 Studio 中主導 Interview。
+被指派訪談使用者、開發 MCP 工具的 CIM 工程師，以所屬部門是否為 CIM 部門認定；在 Studio 中主導 Interview。
 _Avoid_: 開發者、IT
 
 **Business User**:
-了解系統功能、提出需求並撰寫 skills 的使用者；不負責串接系統資料。
+了解系統功能、提出需求並撰寫 skills 的使用者；不負責串接系統資料。在 Studio 中只能檢視，意見由 CIM Engineer 轉述。
 _Avoid_: 客戶、end user
 
 **System Owner**:
