@@ -61,4 +61,23 @@ public class ToolSpecRecord
     public string Kind { get; set; } = "";
     public string State { get; set; } = ToolSpecState.Pending;
     public int CurrentRevision { get; set; }
+    /// <summary>CIM Engineer 已處理評估結果（接受條件、修改或刪除；#28 負責寫入）。為 true 後 System Owner 不能再修改回覆（spec 9）。</summary>
+    public bool Handled { get; set; }
+}
+
+/// <summary>feasibility_review（spec 13）：綁定 revision 的回覆；每次回覆或修改新增一筆，保留歷史。</summary>
+public class FeasibilityReview
+{
+    public long Id { get; set; }
+    public string TicketId { get; set; } = "";
+    public string SpecId { get; set; } = "";
+    public int Revision { get; set; }
+    /// <summary>ToolSpecState.Feasible／Infeasible／Conditional。</summary>
+    public string Result { get; set; } = "";
+    public string? Reason { get; set; }
+    public string? Condition { get; set; }
+    /// <summary>預估工時（人日）；不可行時為 null。</summary>
+    public decimal? EstimatedDays { get; set; }
+    public string ReviewerEmpNo { get; set; } = "";
+    public DateTimeOffset At { get; set; }
 }
