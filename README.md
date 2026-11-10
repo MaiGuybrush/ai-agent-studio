@@ -60,3 +60,8 @@ cd apps/agent && .venv/Scripts/python -m pytest -q      # agent /health
 - `apps/api/appsettings.json`：`Cim:DeptCodePrefixes`（正式環境 CIM 部門代碼前綴；預設空 = 無人是 CIM Engineer；含空字串啟動失敗）。
 - `Authentication:Uac:BaseUrls`：有值時直接使用（本機 mock），否則由 Consul 取得 UAC 位址。
 - `apps/web/src/assets/config.json`：`authApiUrl`、`apiBaseUrl`；部署時覆寫。
+
+## 系統設定檔（#19）
+
+- `apps/api/studio.config.json`（路徑可用 `Studio:ConfigPath` 改）：`mcpServers`（`type` 只支援 `http`／`stdio`；秘密寫 `${VAR}` 從環境變數帶入）、`systems`（系統 → System Owner 工號）、`cimDeptCodes`。改檔後下次讀取自動重載，環境變數未設會報錯。
+- MCP 工具清單記憶體快取 5 分鐘，key 含 server 連線設定（即憑證身分）；跨 server 同名工具以 `{server}__{tool}` 區分。

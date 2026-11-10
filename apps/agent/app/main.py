@@ -8,6 +8,7 @@ import json
 import secrets
 from pathlib import Path
 
+import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -17,6 +18,7 @@ from pydantic_ai.messages import ModelMessagesTypeAdapter
 from pydantic_ai.models import Model
 
 from app.config import Config, load_config
+from app.tools import make_readonly_tools
 
 INSTRUCTIONS = (Path(__file__).parent / "instructions.md").read_text(encoding="utf-8")
 
@@ -25,7 +27,7 @@ class RunRequest(BaseModel):
     run_id: str
     messages: list[dict]  # pydantic-ai ModelMessage 的 JSON 形式，最後一則是使用者剛送出的訊息
     opening_context: str = ""
-    run_token: str = ""  # 之後呼叫 C# tool API 用；此票尚未掛工具
+    run_token: str = ""  # 呼叫 C# tool API 用（X-Run-Token）
     tool_api_base_url: str = ""
 
 
@@ -42,7 +44,7 @@ def build_model(cfg: Config) -> Model | None:
     return OpenAIChatModel(cfg.model_name, provider=OpenAIProvider(base_url=cfg.model_base_url, api_key=cfg.model_api_key))
 
 
-def create_app(model: Model | None = None, api_key: str | None = None) -> FastAPI:
+def create_app(model: Model | None = None, api_key: str | None = None, tool_transport: httpx.AsyncBaseTransport | None = None) -> FastAPI:
     cfg = load_config()
     model = model or build_model(cfg)
     api_key = cfg.api_key if api_key is None else api_key
@@ -62,7 +64,8 @@ def create_app(model: Model | None = None, api_key: str | None = None) -> FastAP
         if model is None:
             raise HTTPException(503, "model not configured")
         history = ModelMessagesTypeAdapter.validate_python(req.messages)
-        agent = Agent(model, instructions=INSTRUCTIONS)
+        agent = Agent(model, instructions=INSTRUCTIONS,
+                      tools=make_readonly_tools(req.tool_api_base_url, req.run_token, tool_transport))
         q: asyncio.Queue[str | None] = asyncio.Queue()
 
         async def drive() -> None:
