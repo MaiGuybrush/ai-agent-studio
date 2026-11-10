@@ -8,11 +8,11 @@ import httpx
 
 
 def make_readonly_tools(base_url: str, run_token: str, transport: httpx.AsyncBaseTransport | None = None) -> list[Callable]:
-    async def call(path: str):
+    async def call(path: str, **params):
         try:
             async with httpx.AsyncClient(base_url=base_url, transport=transport, timeout=30,
                                          headers={"X-Run-Token": run_token}) as c:
-                r = await c.get(f"/internal/tools/{path}")
+                r = await c.get(f"/internal/tools/{path}", params=params)
                 r.raise_for_status()
                 return r.json()
         except httpx.HTTPError as e:  # 讓模型看到失敗原因，而不是整個 run 當掉
@@ -30,4 +30,8 @@ def make_readonly_tools(base_url: str, run_token: str, transport: httpx.AsyncBas
         """取得這張需求單（描述、狀態、CIM Engineer、Business User）。"""
         return await call("requirement-ticket")
 
-    return [list_mcp_tools, list_systems, get_requirement_ticket]
+    async def search_tool_specs(keyword: str):
+        """查別張需求單進行中的 Tool Spec（比對用途、預期工具名稱、系統）。有相似的就提醒 CIM Engineer，由他決定等待或另開 New。"""
+        return await call("tool-specs", keyword=keyword)
+
+    return [list_mcp_tools, list_systems, get_requirement_ticket, search_tool_specs]

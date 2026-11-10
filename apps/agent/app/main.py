@@ -41,10 +41,10 @@ class Deps:
     transport: httpx.AsyncBaseTransport | None
 
 
-async def call_tool(ctx: RunContext[Deps], method: str, step_id: str, **kw) -> str:
+async def call_tool(ctx: RunContext[Deps], method: str, step_id: str, area: str = "workflow-steps", **kw) -> str:
     """草稿工具只是薄包裝：規則（人工修改優先、版本）都在 C#；把 C# 的回應（含拒絕與目前的值）原樣交給模型。"""
     async with httpx.AsyncClient(base_url=ctx.deps.base_url, transport=ctx.deps.transport, headers={"X-Run-Token": ctx.deps.token}) as c:
-        r = await c.request(method, f"/internal/tools/workflow-steps/{step_id}", **kw)
+        r = await c.request(method, f"/internal/tools/{area}/{step_id}", **kw)
     return f"HTTP {r.status_code} {r.text}"
 
 
@@ -74,12 +74,45 @@ async def delete_workflow_step(ctx: RunContext[Deps], step_id: str, override_hum
     return await call_tool(ctx, "DELETE", step_id, params={"override_human_edit": "true"} if override_human_edit else {})
 
 
+async def upsert_tool_spec(
+    ctx: RunContext[Deps],
+    spec_id: str,
+    kind: str | None = None,
+    purpose: str | None = None,
+    system: str | None = None,
+    system_owner: str | None = None,
+    side_effect: str | None = None,
+    inputs: dict | None = None,
+    outputs: dict | None = None,
+    ref: dict | None = None,
+    expected_tool_name: str | None = None,
+    accepted_condition: str | None = None,
+    override_human_edit: bool = False,
+) -> str:
+    """新增或修改一份 Tool Spec 草稿（只傳要改的欄位）。kind 為 Reuse／Extend／New；system 為 list_systems 的系統名稱；
+    system_owner 為工號（Reuse 不需要）；side_effect 為 read／write；inputs／outputs 為 JSON Schema 子集
+    （type: string／number／integer／boolean／array(含 items)／object(可巢狀)，另有 enum、format: date-time、required、description）；
+    Reuse／Extend 帶 ref {server, tool}（C# 會保存當時的 schema 快照；Extend 的 inputs／outputs 只列新增或修改的欄位）。
+    回傳會列出還缺哪些必填欄位；被人工修改過的欄位會被拒絕並回傳目前的值，徵得 CIM Engineer 同意才能帶 override_human_edit=true。"""
+    fields = {k: v for k, v in dict(kind=kind, purpose=purpose, system=system, system_owner=system_owner, side_effect=side_effect,
+                                    inputs=inputs, outputs=outputs, ref=ref, expected_tool_name=expected_tool_name,
+                                    accepted_condition=accepted_condition).items() if v is not None}
+    if override_human_edit:
+        fields["override_human_edit"] = True
+    return await call_tool(ctx, "PUT", spec_id, "tool-specs", json=fields)
+
+
+async def delete_tool_spec(ctx: RunContext[Deps], spec_id: str, override_human_edit: bool = False) -> str:
+    """刪除一份 Tool Spec 草稿；人工修改過的需徵得同意後帶 override_human_edit=true。"""
+    return await call_tool(ctx, "DELETE", spec_id, "tool-specs", params={"override_human_edit": "true"} if override_human_edit else {})
+
+
 def draft_context(req: "RunRequest") -> str:
     draft = json.dumps(req.draft, ensure_ascii=False)
     diff = json.dumps(req.draft_diff, ensure_ascii=False)
     return "\n".join([
         "需求描述（建單時貼上）：", req.opening_context, "",
-        "目前的 Workflow Definition 草稿：", draft, "",
+        "目前的草稿（steps = Workflow Definition，tool_specs = Tool Spec）：", draft, "",
         "CIM Engineer 自上回合以來的人工修改（以此為準，不要覆蓋）：", diff,
     ])
 
@@ -118,7 +151,7 @@ def create_app(model: Model | None = None, api_key: str | None = None, tool_tran
             raise HTTPException(503, "model not configured")
         history = ModelMessagesTypeAdapter.validate_python(req.messages)
         agent = Agent(model, instructions=INSTRUCTIONS, deps_type=Deps,
-                      tools=[*make_readonly_tools(req.tool_api_base_url, req.run_token, tool_transport), upsert_workflow_step, delete_workflow_step])
+                      tools=[*make_readonly_tools(req.tool_api_base_url, req.run_token, tool_transport), upsert_workflow_step, delete_workflow_step, upsert_tool_spec, delete_tool_spec])
         q: asyncio.Queue[str | None] = asyncio.Queue()
 
         async def drive() -> None:
