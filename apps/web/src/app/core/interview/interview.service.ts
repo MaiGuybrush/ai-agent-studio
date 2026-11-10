@@ -29,6 +29,27 @@ export interface WorkflowDraft {
   humanEdits: string[]; // 人工修改過的欄位路徑，例如 steps.s1.description
 }
 
+/** Tool Spec 草稿（#21）：欄位見 spec 6.2；inputs／outputs 為 JSON Schema 子集。 */
+export interface ToolSpec {
+  id: string;
+  kind?: 'Reuse' | 'Extend' | 'New';
+  purpose?: string;
+  system?: string;
+  system_owner?: string;
+  side_effect?: 'read' | 'write';
+  inputs?: unknown;
+  outputs?: unknown;
+  ref?: { server: string; tool: string; schema_snapshot?: unknown };
+  expected_tool_name?: string;
+  accepted_condition?: string;
+}
+export interface ToolSpecDraft {
+  version: number;
+  steps: ToolSpec[]; // 後端與 Workflow 草稿共用 DraftView，欄位名稱沿用 steps
+  humanEdits: string[]; // 例如 tool_specs.ts1.purpose
+  missing: Record<string, string[]>; // 每份 Tool Spec 還缺的必填欄位
+}
+
 @Injectable({ providedIn: 'root' })
 export class InterviewService {
   private readonly http = inject(HttpClient);
@@ -53,9 +74,17 @@ export class InterviewService {
     return firstValueFrom(this.http.put<WorkflowDraft>(this.draftUrl(ticketId), { version, steps }));
   }
 
-  private draftUrl(ticketId: string): string {
+  toolSpecDraft(ticketId: string): Promise<ToolSpecDraft> {
+    return firstValueFrom(this.http.get<ToolSpecDraft>(this.draftUrl(ticketId, 'tool-spec-draft')));
+  }
+
+  saveToolSpecDraft(ticketId: string, version: number, steps: ToolSpec[]): Promise<ToolSpecDraft> {
+    return firstValueFrom(this.http.put<ToolSpecDraft>(this.draftUrl(ticketId, 'tool-spec-draft'), { version, steps }));
+  }
+
+  private draftUrl(ticketId: string, doc = 'workflow-draft'): string {
     const base = this.config.normalizeUrl(String(this.config.config()['apiBaseUrl'] ?? ''));
-    return `${base}/api/tickets/${encodeURIComponent(ticketId)}/workflow-draft`;
+    return `${base}/api/tickets/${encodeURIComponent(ticketId)}/${doc}`;
   }
 
   cancel(ticketId: string): Promise<unknown> {

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { Ticket, TicketService } from '../../core/tickets/ticket.service';
-import { ChatMessage, Conversation, InterviewService, WorkflowDraft } from '../../core/interview/interview.service';
+import { ChatMessage, Conversation, InterviewService, ToolSpecDraft, WorkflowDraft } from '../../core/interview/interview.service';
 import { SseMessage } from '../../core/interview/sse';
 import { InterviewPageComponent } from './interview-page.component';
 
@@ -34,6 +34,7 @@ const text = (id: number, t: string): SseMessage => ({ id: String(id), type: 'te
 function setup(opts: { ticket: Ticket; conv?: Conversation }) {
   const conv = { current: opts.conv ?? { running: false, messages: [] as ChatMessage[] } };
   const draft = { current: { version: 0, steps: [], humanEdits: [] } as WorkflowDraft };
+  const specs = { current: { version: 0, steps: [], humanEdits: [], missing: {} } as ToolSpecDraft };
   const svc = {
     conversation: vi.fn(() => Promise.resolve(structuredClone(conv.current))),
     send: vi.fn(),
@@ -41,6 +42,8 @@ function setup(opts: { ticket: Ticket; conv?: Conversation }) {
     cancel: vi.fn(() => Promise.resolve()),
     workflowDraft: vi.fn(() => Promise.resolve(structuredClone(draft.current))),
     saveWorkflowDraft: vi.fn(),
+    toolSpecDraft: vi.fn(() => Promise.resolve(structuredClone(specs.current))),
+    saveToolSpecDraft: vi.fn(),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -61,7 +64,7 @@ function setup(opts: { ticket: Ticket; conv?: Conversation }) {
     (root.querySelector('button.send') as HTMLButtonElement).click();
     await settle();
   };
-  return { fx, root, svc, conv, draft, settle, say };
+  return { fx, root, svc, conv, draft, specs, settle, say };
 }
 const bubbles = (root: HTMLElement) => Array.from(root.querySelectorAll('.msg')).map((m) => m.textContent!.trim());
 
@@ -227,5 +230,31 @@ describe('InterviewPageComponent', () => {
     expect(bubbles(root)).toEqual(['別人的對話']);
     expect(root.querySelector('textarea[name=message]')).toBeNull();
     expect(root.querySelector('.readonly')!.textContent).toContain('唯讀');
+  });
+
+  it('Tool Spec tab lists specs with missing fields and human-edit marks, and saves edits with the version', async () => {
+    const { fx, root, svc, specs, settle } = setup({ ticket: ticket(true) });
+    specs.current = {
+      version: 2, humanEdits: ['tool_specs.ts1.purpose'], missing: { ts1: ['inputs', 'system_owner'] },
+      steps: [{ id: 'ts1', kind: 'New', purpose: '查工單', system: 'MES' }],
+    };
+    fx.detectChanges(); await settle();
+    (root.querySelectorAll('.col-right .tab')[1] as HTMLElement).click();
+    fx.detectChanges(); await settle();
+    const card = root.querySelector('.spec')!;
+    expect(card.textContent).toContain('New');
+    expect(card.textContent).toContain('MES');
+    expect(card.querySelector('.missing')!.textContent).toContain('inputs');
+    expect(card.querySelector('.missing')!.textContent).toContain('system_owner');
+    expect(card.querySelector('.f-purpose')!.classList.contains('human')).toBe(true);
+
+    const input = card.querySelector('.f-purpose') as HTMLTextAreaElement;
+    input.value = '查工單狀態';
+    input.dispatchEvent(new Event('input'));
+    fx.detectChanges();
+    svc.saveToolSpecDraft.mockResolvedValue({ ...specs.current, version: 3 });
+    (root.querySelector('.save-specs') as HTMLButtonElement).click();
+    await settle();
+    expect(svc.saveToolSpecDraft).toHaveBeenCalledWith('T-1', 2, [{ id: 'ts1', kind: 'New', purpose: '查工單狀態', system: 'MES' }]);
   });
 });
