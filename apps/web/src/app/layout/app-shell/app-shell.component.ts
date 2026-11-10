@@ -13,6 +13,11 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
     route: '/dashboard',
     icon: 'dashboard',
   },
+  {
+    label: '需求單 / Tickets',
+    route: '/tickets',
+    icon: 'tickets',
+  },
 ];
 
 @Component({

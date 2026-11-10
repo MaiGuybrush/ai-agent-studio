@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.InteropServices;
@@ -33,7 +34,11 @@ var app = builder.Build();
 if (!app.Environment.IsEnvironment("Testing"))
 {
     using var scope = app.Services.CreateScope();
-    scope.ServiceProvider.GetRequiredService<AiAgentStudio.Api.Tickets.StudioDb>().Database.Migrate();
+    var studio = scope.ServiceProvider.GetRequiredService<AiAgentStudio.Api.Tickets.StudioDb>();
+    studio.Database.Migrate();
+    // 啟動時清除遺留的「執行中」標記（spec 2.4）
+    foreach (var iv in studio.Interviews.Where(x => x.IsRunning)) iv.IsRunning = false;
+    studio.SaveChanges();
 }
 
 // Swagger 配置
