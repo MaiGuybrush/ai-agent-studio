@@ -28,6 +28,39 @@ export interface Ticket {
   permissions: TicketPermissions;
 }
 
+/** 唯讀檢視（spec 3.3、§12）：最新送出的 Workflow Definition、各 Tool Spec 凍結的 revision 與評估結果；沒有對話與草稿。 */
+export interface ReadOnlyReview {
+  revision: number;
+  result: string;
+  reason: string | null;
+  condition: string | null;
+  estimatedDays: number | null;
+  reviewerEmpNo: string;
+  at: string;
+}
+export interface ReadOnlyToolSpec {
+  specId: string;
+  kind: string;
+  state: string;
+  revision: number;
+  acceptedCondition: string | null;
+  content: Record<string, unknown>;
+  reviews: ReadOnlyReview[];
+  implemented: { serverKey: string; toolName: string } | null;
+}
+export interface ReadOnlyWorkflowStep {
+  id: string;
+  description?: string;
+  tool_spec?: string;
+  condition?: string;
+  needs_approval?: boolean;
+}
+export interface ReadOnlyView {
+  ticket: Ticket;
+  workflow: ReadOnlyWorkflowStep[];
+  toolSpecs: ReadOnlyToolSpec[];
+}
+
 export interface CreateTicket {
   id: string;
   description: string;
@@ -58,6 +91,9 @@ export class TicketService {
   }
   get(id: string): Promise<Ticket> {
     return firstValueFrom(this.http.get<Ticket>(this.url(this.id(id))));
+  }
+  readOnly(id: string): Promise<ReadOnlyView> {
+    return firstValueFrom(this.http.get<ReadOnlyView>(this.url(`${this.id(id)}/readonly`)));
   }
   markdown(id: string): Promise<string> {
     return firstValueFrom(this.http.get(this.url(`${this.id(id)}/markdown`), { responseType: 'text' }));
