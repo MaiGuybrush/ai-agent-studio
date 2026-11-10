@@ -47,6 +47,15 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
     public DbSet<AiAgentStudio.Api.Interviews.Interview> Interviews => Set<AiAgentStudio.Api.Interviews.Interview>();
     public DbSet<AiAgentStudio.Api.Interviews.AgentRun> AgentRuns => Set<AiAgentStudio.Api.Interviews.AgentRun>();
 
+    /// <summary>啟動時清除遺留的「執行中」標記（spec 2.4）；回傳清除筆數。</summary>
+    public int ClearStaleRunning()
+    {
+        var stale = Interviews.Where(x => x.IsRunning).ToList();
+        foreach (var iv in stale) iv.IsRunning = false;
+        SaveChanges();
+        return stale.Count;
+    }
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<AiAgentStudio.Api.Interviews.Interview>(e =>
