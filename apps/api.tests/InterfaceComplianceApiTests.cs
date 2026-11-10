@@ -79,6 +79,7 @@ public class InterfaceComplianceApiTests : IDisposable
     static object Spec(string kind, string? owner) => new Dictionary<string, object?>
     {
         ["kind"] = kind, ["purpose"] = "查工單", ["system"] = "MES", ["side_effect"] = "read", ["system_owner"] = owner,
+        ["ref"] = kind is "Reuse" or "Extend" ? new { server = "gw", tool = "get_order" } : null, // §6.2：Reuse／Extend 必填 ref
         ["inputs"] = new { type = "object", properties = new { eqptId = new { type = "string" } } },
         ["outputs"] = new { type = "object", properties = new { status = new { type = "string" } } },
     };

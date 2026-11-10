@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using AiAgentStudio.Api.Tickets;
 
 namespace AiAgentStudio.Api.Submissions;
@@ -28,6 +32,35 @@ public static class TicketStatusDeriver
         if (s.Find(x => !ToolSpecState.All.Contains(x)) is { } bad) throw new ArgumentException($"未知的 Tool Spec 狀態 '{bad}'。");
         if (s.Any(x => x is ToolSpecState.Pending or ToolSpecState.Infeasible or ToolSpecState.Conditional)) return TicketStatus.Evaluating;
         return s.All(x => x == ToolSpecState.Implemented) ? TicketStatus.Completed : TicketStatus.Implementing;
+    }
+}
+
+/// <summary>
+/// 已實作的 Tool Spec 不重檢（spec 7.3）：狀態為已實作、且草稿內容與凍結的 revision 相同者，以 interface_snapshot 為準。
+/// 重開 Interview 後被改動的已實作 spec 不在此列（送出時會變成新 revision，要重新檢查）。
+/// </summary>
+public static class FrozenSpecs
+{
+    static JsonObject Norm(JsonNode n)
+    {
+        var c = (JsonObject)n.DeepClone(); c.Remove("id"); c.Remove("naming_check"); c.Remove("system_owner_name");
+        return c;
+    }
+
+    public static async Task<HashSet<string>> IdsAsync(StudioDb db, string ticketId, IEnumerable<JsonObject> draftSpecs, CancellationToken ct)
+    {
+        var recs = await db.ToolSpecRecords.AsNoTracking().Where(r => r.TicketId == ticketId && r.State == ToolSpecState.Implemented).ToListAsync(ct);
+        var res = new HashSet<string>();
+        if (recs.Count == 0) return res;
+        var revs = await db.ToolSpecRevisions.AsNoTracking().Where(r => r.TicketId == ticketId).ToListAsync(ct);
+        foreach (var s in draftSpecs)
+        {
+            var id = s["id"]!.GetValue<string>();
+            var rec = recs.FirstOrDefault(r => r.SpecId == id);
+            var rev = rec is null ? null : revs.FirstOrDefault(v => v.SpecId == id && v.Revision == rec.CurrentRevision);
+            if (rev is not null && JsonNode.DeepEquals(Norm(s), Norm(JsonNode.Parse(rev.ContentJson)!))) res.Add(id);
+        }
+        return res;
     }
 }
 

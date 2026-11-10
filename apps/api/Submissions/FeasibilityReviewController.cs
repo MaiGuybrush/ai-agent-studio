@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using AiAgentStudio.Api.Notifications;
 using AiAgentStudio.Api.Services;
 using AiAgentStudio.Api.Tickets;
+using AiAgentStudio.Api.Workflow;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -45,7 +46,7 @@ public class FeasibilityReviewController(ICurrentUserService user, StudioDb db, 
     {
         if (user.EmpNo is not { } me) return Forbid();
         // ponytail: 先取全部 Pending 再在記憶體比對工號；量大時把 system_owner 存成 tool_spec 欄位
-        var pending = await db.ToolSpecRecords.AsNoTracking().Where(r => r.State == ToolSpecState.Pending && r.Kind != "Reuse").ToListAsync(ct);
+        var pending = await db.ToolSpecRecords.AsNoTracking().Where(r => r.State == ToolSpecState.Pending && r.Kind != ToolSpecKinds.Reuse).ToListAsync(ct);
         var ticketIds = pending.Select(r => r.TicketId).Distinct().ToList();
         var tickets = await db.Tickets.AsNoTracking().Where(t => ticketIds.Contains(t.Id) && t.Status == TicketStatus.Submitted).ToDictionaryAsync(t => t.Id, ct);
         var revs = await db.ToolSpecRevisions.AsNoTracking().Where(r => ticketIds.Contains(r.TicketId)).ToListAsync(ct);
@@ -127,7 +128,7 @@ public class FeasibilityReviewController(ICurrentUserService user, StudioDb db, 
     {
         var recs = track ? db.ToolSpecRecords : db.ToolSpecRecords.AsNoTracking();
         var rec = await recs.FirstOrDefaultAsync(r => r.TicketId == ticketId && r.SpecId == specId, ct);
-        if (rec is null || rec.Kind == "Reuse") return (null, NotFound());
+        if (rec is null || rec.Kind == ToolSpecKinds.Reuse) return (null, NotFound());
         var rev = await db.ToolSpecRevisions.AsNoTracking().FirstAsync(r => r.TicketId == ticketId && r.SpecId == specId && r.Revision == rec.CurrentRevision, ct);
         var assigns = await db.ReviewAssignments.AsNoTracking().Where(a => a.TicketId == ticketId && a.SpecId == specId).ToListAsync(ct);
         if (user.EmpNo is not { } me || SpecOwner.Resolve(rev.ContentJson, rev.Revision, assigns) != me) return (null, Forbid());

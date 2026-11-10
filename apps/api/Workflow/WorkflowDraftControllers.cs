@@ -66,6 +66,7 @@ public class WorkflowDraftController(ICurrentUserService user, IdentityService i
         if (t is null) return NotFound();
         if (t.CimEngineerEmpNo != me.EmpNo) return Forbid();
         if (t.Status == TicketStatus.Cancelled) return Problem("需求單已取消，無法編輯。", statusCode: 409);
+        if (t.Status == TicketStatus.Submitted) return Problem("需求單已送出；請先重開 Interview 再編輯草稿（送出後的修改走處理評估結果）。", statusCode: 409);
         var ids = req.Steps?.Select(s => (s as JsonObject)?["id"]?.GetValue<string>()).ToList();
         if (req.Steps is null || ids!.Any(string.IsNullOrWhiteSpace) || ids!.Distinct().Count() != ids!.Count)
             return Problem("每一筆都需要唯一的 id。", statusCode: 400);
@@ -86,21 +87,23 @@ public class WorkflowDraftController(ICurrentUserService user, IdentityService i
 [ApiController]
 [Route("internal/tools/workflow-steps")]
 [AllowAnonymous]
-public class WorkflowToolController(RunTokenService tokens, WorkflowDraftService drafts, InterviewRunner runner) : ControllerBase
+public class WorkflowToolController(RunTokenService tokens, WorkflowDraftService drafts, InterviewRunner runner, StudioDb db) : ControllerBase
 {
     [HttpPut("{stepId}")]
-    public async Task<IActionResult> Upsert(string stepId, [FromBody] JsonObject body)
+    public async Task<IActionResult> Upsert(string stepId, [FromBody] JsonObject body, CancellationToken ct)
     {
         if (tokens.Validate(Request.Headers["X-Run-Token"].ToString()) is not { } c) return Unauthorized();
+        if (await ToolApiGuard.RejectWriteAsync(db, c.TicketId, ct) is { } closed) return closed;
         var over = body["override_human_edit"]?.GetValue<bool>() ?? false;
         body.Remove("override_human_edit");
         return Reply(c, await drafts.AgentUpsertAsync(c.TicketId, c.EmpNo, stepId, body, over));
     }
 
     [HttpDelete("{stepId}")]
-    public async Task<IActionResult> Delete(string stepId, [FromQuery(Name = "override_human_edit")] bool over = false)
+    public async Task<IActionResult> Delete(string stepId, [FromQuery(Name = "override_human_edit")] bool over = false, CancellationToken ct = default)
     {
         if (tokens.Validate(Request.Headers["X-Run-Token"].ToString()) is not { } c) return Unauthorized();
+        if (await ToolApiGuard.RejectWriteAsync(db, c.TicketId, ct) is { } closed) return closed;
         return Reply(c, await drafts.AgentDeleteAsync(c.TicketId, c.EmpNo, stepId, over));
     }
 

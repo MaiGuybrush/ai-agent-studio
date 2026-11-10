@@ -34,6 +34,9 @@ public class McpToolCatalogTests : IDisposable
         }
     }
 
+    /// <summary>其他測試共用：一個 "gw" server，只有 get_order 一個工具（Reuse／Extend 的 ref 要指到真的工具）。</summary>
+    public static FakeServers GwFactory() => new(new() { ["gw"] = [new Tool { Name = "get_order", InputSchema = Obj("{}") }] });
+
     public static JsonElement Obj(string props) => JsonDocument.Parse("{\"type\":\"object\",\"properties\":" + props + "}").RootElement.Clone();
 
     public static Tool[] Tools(params string[] names) =>

@@ -78,12 +78,12 @@ public class ToolSpecDraftTests : IDisposable
     }
 
     [Fact]
-    public async Task Reuse_needs_no_system_owner()
+    public async Task Reuse_needs_a_ref_but_no_system_owner()
     {
         using var f = Make(); await f.Seed();
         var r = await Upsert(Agent(f), "ts1", new
         {
-            kind = "Reuse", purpose = "查料件", system = "MES", side_effect = "read",
+            kind = "Reuse", purpose = "查料件", system = "MES", side_effect = "read", @ref = new { server = "gw", tool = "get_part" },
             inputs = new { type = "object", properties = new { id = Str } }, outputs = new { type = "object", properties = new { qty = new { type = "integer" } } },
         });
         Assert.Empty((await TicketFactory.Json(r)).GetProperty("missing").EnumerateArray());

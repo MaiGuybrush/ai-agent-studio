@@ -59,12 +59,16 @@ public sealed class McpToolCatalog(StudioConfigProvider config, IMcpTransportFac
         return result;
     }
 
-    async Task<McpServerTools> ListServerAsync(string id, McpServerConfig cfg, CancellationToken ct)
+    /// <summary>單一 server 的最新工具清單：略過快取直接重新列舉（結果會更新快取）。找不到該 server 設定回 null。供實作檢查用（spec 6.4）。</summary>
+    public async Task<McpServerTools?> ListFreshAsync(string id, CancellationToken ct = default) =>
+        config.Current.McpServers.TryGetValue(id, out var cfg) ? await ListServerAsync(id, cfg, ct, fresh: true) : null;
+
+    async Task<McpServerTools> ListServerAsync(string id, McpServerConfig cfg, CancellationToken ct, bool fresh = false)
     {
         var key = $"{id}|{cfg.Type}|{cfg.Url}|{cfg.Command}|{string.Join('\u0001', cfg.Args)}|" +
                   string.Join('\u0001', cfg.Headers.Select(h => $"{h.Key}={h.Value}")) + "|" +
                   string.Join('\u0001', cfg.Env.Select(e => $"{e.Key}={e.Value}"));
-        if (cache.TryGetValue(key, out var hit) && time.GetUtcNow() - hit.At < Ttl) return hit.Result;
+        if (!fresh && cache.TryGetValue(key, out var hit) && time.GetUtcNow() - hit.At < Ttl) return hit.Result;
 
         McpServerTools r;
         try

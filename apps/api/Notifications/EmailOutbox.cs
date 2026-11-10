@@ -29,7 +29,7 @@ public class EmailOutbox
         db.EmailOutbox.Add(new EmailOutbox
         {
             EventType = eventType, RecipientEmpNo = recipientEmpNo, TicketId = ticketId, CreatedAt = now, NextAttemptAt = now,
-            PayloadJson = System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }),
+            PayloadJson = System.Text.Json.JsonSerializer.Serialize(payload, JsonOpts.Relaxed),
         }).Entity;
 }
 

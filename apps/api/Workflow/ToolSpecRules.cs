@@ -4,27 +4,38 @@ using System.Text.Json.Nodes;
 
 namespace AiAgentStudio.Api.Workflow;
 
+/// <summary>Tool Spec 的 Kind（DB／JSON 的值就是這些字串）。</summary>
+public static class ToolSpecKinds
+{
+    public const string Reuse = "Reuse", Extend = "Extend", New = "New";
+    public static readonly string[] All = [Reuse, Extend, New];
+    /// <summary>Reuse／Extend 要參照現有工具（ref）。</summary>
+    public static bool NeedsRef(string? kind) => kind is Reuse or Extend;
+}
+
 /// <summary>Tool Spec 的欄位規則（spec 6.1、6.2）。業務規則只在這裡，Python 與畫面都不重複。</summary>
 public static class ToolSpecRules
 {
-    public static readonly string[] Kinds = ["Reuse", "Extend", "New"];
     public static readonly string[] SideEffects = ["read", "write"];
     static readonly string[] Types = ["string", "number", "integer", "boolean", "array", "object"];
     static readonly string[] SchemaKeys = ["type", "properties", "items", "enum", "format", "required", "description"];
 
-    /// <summary>送出前必填但目前缺少的欄位；Reuse 不需要 System Owner（所屬單由 token 決定，不用填）。</summary>
+    /// <summary>送出前必填但目前缺少的欄位；Reuse 不需要 System Owner（所屬單由 token 決定，不用填）；Reuse／Extend 要有 ref（§6.2）。</summary>
     public static string[] Missing(JsonObject spec)
     {
-        bool Has(string k) => spec[k] is { } v && !(v is JsonValue jv && jv.TryGetValue<string>(out var s) && string.IsNullOrWhiteSpace(s));
+        bool Has(string k) => k == "ref"
+            ? spec[k] is JsonObject r && !string.IsNullOrWhiteSpace(Str(r["server"]!)) && !string.IsNullOrWhiteSpace(Str(r["tool"]!))
+            : spec[k] is { } v && !(v is JsonValue jv && jv.TryGetValue<string>(out var s) && string.IsNullOrWhiteSpace(s));
         var need = new List<string> { "kind", "purpose", "system", "inputs", "outputs", "side_effect" };
-        if (spec["kind"]?.GetValue<string>() != "Reuse") need.Add("system_owner");
+        if (spec["kind"]?.GetValue<string>() != ToolSpecKinds.Reuse) need.Add("system_owner");
+        if (ToolSpecKinds.NeedsRef(spec["kind"]?.GetValue<string>())) need.Add("ref");
         return need.Where(k => !Has(k)).ToArray();
     }
 
     /// <summary>檢查會寫入的欄位；回傳錯誤訊息，null 表示通過。systems 為系統對照表的系統名稱。</summary>
     public static string? Validate(JsonObject fields, IEnumerable<string> systems)
     {
-        if (fields["kind"] is { } k && !Kinds.Contains(Str(k))) return $"kind 必須是 {string.Join("／", Kinds)}。";
+        if (fields["kind"] is { } k && !ToolSpecKinds.All.Contains(Str(k))) return $"kind 必須是 {string.Join("／", ToolSpecKinds.All)}。";
         if (fields["side_effect"] is { } se && !SideEffects.Contains(Str(se))) return $"side_effect 必須是 {string.Join("／", SideEffects)}。";
         if (fields["system"] is { } sys && !systems.Contains(Str(sys))) return $"未知的系統 '{Str(sys)}'；可用：{string.Join("、", systems)}。";
         foreach (var f in new[] { "inputs", "outputs" })

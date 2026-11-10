@@ -32,6 +32,7 @@ public class ReopenInterviewTests : IDisposable
             b.ConfigureServices(s =>
             {
                 s.RemoveAll<StudioConfigProvider>(); s.AddSingleton(new StudioConfigProvider(path, _ => "k"));
+                s.RemoveAll<IMcpTransportFactory>(); s.AddSingleton<IMcpTransportFactory>(McpToolCatalogTests.GwFactory());
                 s.RemoveAll<IVocabularySource>(); s.AddSingleton<IVocabularySource>(new FakeSource { Sha = "sha1", Text = "class T { static object[] E = new[] { new GlossaryEntry(\"eqptId\", \"EqptId\", \"d\", new[] { \"a\" }), new GlossaryEntry(\"status\", \"Status\", \"d\", new[] { \"b\" }) }; }" });
                 s.RemoveAll<IVocabularyAlert>(); s.AddSingleton<IVocabularyAlert>(new FakeAlert());
                 s.RemoveAll<IVocabularyProposalClient>(); s.AddSingleton<IVocabularyProposalClient>(new FakeProposals());
@@ -41,7 +42,7 @@ public class ReopenInterviewTests : IDisposable
 
     async Task<Factory> Make()
     {
-        File.WriteAllText(path, """{ "mcpServers": {}, "systems": { "MES": "10000001" } }""");
+        File.WriteAllText(path, """{ "mcpServers": { "gw": { "type": "http", "url": "http://gw/mcp" } }, "systems": { "MES": "10000001" } }""");
         var f = new Factory(path);
         f.Names["10000001"] = "MES 負責人";
         await f.Seed();
@@ -58,6 +59,7 @@ public class ReopenInterviewTests : IDisposable
     {
         ["kind"] = kind, ["purpose"] = purpose, ["system"] = "MES", ["side_effect"] = "read",
         ["system_owner"] = kind == "Reuse" ? null : "10000001",
+        ["ref"] = kind is "Reuse" or "Extend" ? new { server = "gw", tool = "get_order" } : null, // §6.2：Reuse／Extend 必填 ref
         ["inputs"] = new { type = "object", properties = new { eqptId = new { type = "string" } } },
         ["outputs"] = new { type = "object", properties = new { status = new { type = "string" } } },
     };

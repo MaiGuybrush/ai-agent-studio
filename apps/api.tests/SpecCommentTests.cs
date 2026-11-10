@@ -39,6 +39,7 @@ public class SpecCommentTests : IDisposable
             b.ConfigureServices(s =>
             {
                 s.RemoveAll<StudioConfigProvider>(); s.AddSingleton(new StudioConfigProvider(path, _ => "k"));
+                s.RemoveAll<IMcpTransportFactory>(); s.AddSingleton<IMcpTransportFactory>(McpToolCatalogTests.GwFactory());
                 s.RemoveAll<IVocabularySource>(); s.AddSingleton<IVocabularySource>(src);
                 s.RemoveAll<IVocabularyAlert>(); s.AddSingleton<IVocabularyAlert>(new FakeAlert());
                 s.RemoveAll<IVocabularyProposalClient>(); s.AddSingleton<IVocabularyProposalClient>(new FakeProposals());
@@ -53,7 +54,7 @@ public class SpecCommentTests : IDisposable
     /// <summary>送出一張有三份 Tool Spec 的單：ts1 → Owner1、ts2 → Owner2；ts3 為 Reuse。</summary>
     async Task<Factory> Make()
     {
-        File.WriteAllText(path, """{ "mcpServers": {}, "systems": { "MES": "10000001" } }""");
+        File.WriteAllText(path, """{ "mcpServers": { "gw": { "type": "http", "url": "http://gw/mcp" } }, "systems": { "MES": "10000001" } }""");
         var f = new Factory(path, src, time, mailDir);
         f.Names[Owner1] = "MES 負責人"; f.Names[Owner2] = "ERP 負責人";
         await f.Seed();
@@ -70,6 +71,7 @@ public class SpecCommentTests : IDisposable
     static object Spec(string kind, string? owner) => new Dictionary<string, object?>
     {
         ["kind"] = kind, ["purpose"] = "查工單", ["system"] = "MES", ["side_effect"] = "read", ["system_owner"] = owner,
+        ["ref"] = kind is "Reuse" or "Extend" ? new { server = "gw", tool = "get_order" } : null, // §6.2：Reuse／Extend 必填 ref
         ["inputs"] = new { type = "object", properties = new { eqptId = new { type = "string" } } },
         ["outputs"] = new { type = "object", properties = new { status = new { type = "string" } } },
     };
