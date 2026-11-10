@@ -73,8 +73,9 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
         b.Entity<AiAgentStudio.Api.Workflow.WorkflowDraft>(e =>
         {
             e.ToTable("workflow_draft");
-            e.HasKey(x => x.TicketId);
+            e.HasKey(x => new { x.TicketId, x.Doc });
             e.Property(x => x.TicketId).HasMaxLength(64);
+            e.Property(x => x.Doc).HasMaxLength(32).HasDefaultValue(AiAgentStudio.Api.Workflow.WorkflowDraft.StepsDoc);
             e.Property(x => x.Version).IsConcurrencyToken();
             e.Property(x => x.DraftJson).HasColumnType("jsonb");
             e.Property(x => x.SeenJson).HasColumnType("jsonb");
