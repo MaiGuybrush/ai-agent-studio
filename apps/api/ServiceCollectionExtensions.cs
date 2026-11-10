@@ -139,6 +139,7 @@ namespace AiAgentStudio.Api
             services.AddSingleton<AiAgentStudio.Api.Vocabulary.IVocabularyAlert, AiAgentStudio.Api.Vocabulary.LogVocabularyAlert>();
             services.AddSingleton<AiAgentStudio.Api.Vocabulary.VocabularyService>();
             services.AddScoped<AiAgentStudio.Api.Vocabulary.ToolSpecNaming>();
+            services.AddScoped<AiAgentStudio.Api.Vocabulary.PendingTermService>();
             services.AddHttpClient<AiAgentStudio.Api.Vocabulary.IVocabularyProposalClient, AiAgentStudio.Api.Vocabulary.GiteaVocabularyProposalClient>((sp, c) =>
             {
                 if (sp.GetRequiredService<AiAgentStudio.Api.Vocabulary.GiteaOptions>().BaseUrl is { Length: > 0 } baseUrl) c.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");

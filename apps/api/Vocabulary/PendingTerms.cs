@@ -44,9 +44,23 @@ public class PendingTerm
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+/// <summary>Pending Term 的清單與自動移出（spec 7.3）。業務規則只在這裡。</summary>
+public class PendingTermService(StudioDb db)
+{
+    /// <summary>目前仍為 Pending 的名詞；已出現在 Tier1Vocabulary（標準名或別名，不分大小寫）的順手標成 Promoted 移出。</summary>
+    public async Task<List<PendingTerm>> ActiveAsync(IReadOnlyList<GlossaryEntry> vocab, CancellationToken ct = default)
+    {
+        var pending = await db.PendingTerms.Where(x => x.Status == PendingTermStatus.Pending).OrderBy(x => x.Id).ToListAsync(ct);
+        var promoted = pending.Where(t => NamingChecker.Check(vocab, t.Term).Status != "new").ToList();
+        foreach (var t in promoted) t.Status = PendingTermStatus.Promoted;
+        if (promoted.Count > 0) await db.SaveChangesAsync(ct);
+        return pending.Except(promoted).ToList();
+    }
+}
+
 [ApiController]
 [Authorize]
-public class PendingTermController(ICurrentUserService user, IdentityService identity, StudioDb db, IVocabularyProposalClient proposals, TimeProvider time) : ControllerBase
+public class PendingTermController(ICurrentUserService user, IdentityService identity, StudioDb db, PendingTermService pendingTerms, VocabularyService vocab, IVocabularyProposalClient proposals, TimeProvider time) : ControllerBase
 {
     public record ConfirmRequest(string? Term, string? Explanation, string[]? Aliases);
 
@@ -71,7 +85,21 @@ public class PendingTermController(ICurrentUserService user, IdentityService ide
         var term = req.Term.Trim();
         var explanation = req.Explanation.Trim();
         var aliases = (req.Aliases ?? []).Select(a => a.Trim()).Where(a => a.Length > 0).ToArray();
-        var issue = await proposals.CreateAsync(new(term, explanation, aliases, ticketId), ct);
+
+        VocabularySnapshot v;
+        try { v = await vocab.GetAsync(ct); }
+        catch (VocabularyException e) { return Problem(ToolSpecNaming.NoCache(e.Message), statusCode: 503); }
+        if (NamingChecker.Check(v.Entries, term).Status != "new") return Problem($"{term} 已在 Tier1Vocabulary 中（標準名或別名），不是新名詞。", statusCode: 409);
+        if ((await pendingTerms.ActiveAsync(v.Entries, ct)).FirstOrDefault(x => x.Term.Equals(term, StringComparison.OrdinalIgnoreCase)) is { } dup)
+            return Problem($"{dup.Term} 已是 Pending Term（Gitea issue：{dup.GiteaIssueUrl}），不重複開 issue。", statusCode: 409);
+
+        ProposalIssue issue;
+        try { issue = await proposals.CreateAsync(new(term, explanation, aliases, ticketId), ct); }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // 失敗時不留 Pending Term；重試時沒有舊記錄，不會重複。ponytail: 若 Gitea 已建立但回應逾時，重試會重複，需人工關閉。
+            return Problem($"無法在 Gitea 開立 vocabulary-proposal issue，名詞尚未成為 Pending Term，請稍後重試：{e.Message}", statusCode: 502);
+        }
         var row = new PendingTerm
         {
             Term = term, Explanation = explanation, AliasesJson = JsonSerializer.Serialize(aliases), TicketId = ticketId,
@@ -83,6 +111,9 @@ public class PendingTermController(ICurrentUserService user, IdentityService ide
     }
 
     [HttpGet("api/pending-terms")]
-    public async Task<IActionResult> List(CancellationToken ct) =>
-        Ok((await db.PendingTerms.Where(x => x.Status == PendingTermStatus.Pending).OrderBy(x => x.Id).ToListAsync(ct)).Select(View));
+    public async Task<IActionResult> List(CancellationToken ct)
+    {
+        try { return Ok((await pendingTerms.ActiveAsync((await vocab.GetAsync(ct)).Entries, ct)).Select(View)); }
+        catch (VocabularyException e) { return Problem(ToolSpecNaming.NoCache(e.Message), statusCode: 503); }
+    }
 }

@@ -109,4 +109,40 @@ public class PendingTermTests : IDisposable
         Assert.False((await agent.PostAsJsonAsync("/internal/tools/confirm-term", Body())).IsSuccessStatusCode); // 沒有這個工具
         Assert.Empty(proposals.Calls);
     }
+
+    [Fact]
+    public async Task Gitea_failure_gives_a_clear_error_and_leaves_no_pending_term_so_retry_opens_exactly_one_issue()
+    {
+        using var f = await Make();
+        proposals.Fail = new HttpRequestException("gitea down");
+        var r = await Confirm(f.As("CIM1"), Body());
+        Assert.Equal(HttpStatusCode.BadGateway, r.StatusCode);
+        Assert.Contains("Gitea", (await TicketFactory.Json(r)).GetProperty("detail").GetString());
+        Assert.Empty((await TicketFactory.Json(await f.As("CIM1").GetAsync("/api/pending-terms"))).EnumerateArray());
+
+        proposals.Fail = null;
+        Assert.Equal(HttpStatusCode.Created, (await Confirm(f.As("CIM1"), Body())).StatusCode);
+        Assert.Single(proposals.Calls);
+    }
+
+    [Fact]
+    public async Task Confirming_the_same_term_again_does_not_open_a_duplicate_issue()
+    {
+        using var f = await Make();
+        await Confirm(f.As("CIM1"), Body());
+        var r = await Confirm(f.As("CIM1"), Body(term: "LOTGRADE"));
+        Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
+        Assert.Contains("https://gitea.test/issues/101", (await TicketFactory.Json(r)).GetProperty("detail").GetString());
+        Assert.Single(proposals.Calls);
+    }
+
+    [Theory]
+    [InlineData("eqptId")]
+    [InlineData("EQPTID")]
+    public async Task A_term_the_vocabulary_already_knows_is_not_a_new_term(string term)
+    {
+        using var f = await Make();
+        Assert.Equal(HttpStatusCode.Conflict, (await Confirm(f.As("CIM1"), Body(term: term))).StatusCode);
+        Assert.Empty(proposals.Calls);
+    }
 }
