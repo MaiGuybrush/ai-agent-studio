@@ -145,4 +145,51 @@ public class PendingTermTests : IDisposable
         Assert.Equal(HttpStatusCode.Conflict, (await Confirm(f.As("CIM1"), Body(term: term))).StatusCode);
         Assert.Empty(proposals.Calls);
     }
+
+    static HttpClient Agent(InterviewFactory f)
+    {
+        var c = f.CreateClient();
+        c.DefaultRequestHeaders.Add("X-Run-Token", f.Services.GetRequiredService<RunTokenService>().Issue("T-1", "CIM1"));
+        return c;
+    }
+    static async Task<string> Status(InterviewFactory f, string field)
+    {
+        var j = await TicketFactory.Json(await Agent(f).GetAsync($"/internal/tools/naming-check?fields={field}"));
+        return j.GetProperty("results")[0].GetProperty("status").GetString()!;
+    }
+
+    [Fact]
+    public async Task Pending_term_counts_as_known_in_naming_check_until_it_appears_in_the_vocabulary()
+    {
+        using var f = await Make();
+        Assert.Equal("new", await Status(f, "lotGrade"));
+        await Confirm(f.As("CIM1"), Body());
+        Assert.Equal("pending", await Status(f, "lotGrade"));
+        Assert.Equal("pending", await Status(f, "LotGrade")); // 只差大小寫也視為已知
+        Assert.Equal("new", await Status(f, "otherThing"));
+
+        // 收錄後（這裡用別名）自動移出，之後走一般比對規則
+        (src.Sha, src.Text) = ("sha2", WithAlias("lotId", "lotGrade"));
+        time.Advance(TimeSpan.FromMinutes(6));
+        Assert.Equal("rename", await Status(f, "lotGrade"));
+        Assert.Empty((await TicketFactory.Json(await f.As("CIM1").GetAsync("/api/pending-terms"))).EnumerateArray());
+
+        // 移出後同名可再次提案的情況不會發生（已是已知名詞）
+        Assert.Equal(HttpStatusCode.Conflict, (await Confirm(f.As("CIM1"), Body())).StatusCode);
+    }
+
+    static string WithAlias(string camel, string alias) =>
+        $"class T {{ static object[] E = new[] {{ new GlossaryEntry(\"{camel}\", \"{char.ToUpper(camel[0])}{camel[1..]}\", \"d\", new[] {{ \"{alias}\" }}) }}; }}";
+
+    [Fact]
+    public async Task Tool_spec_draft_shows_pending_instead_of_new()
+    {
+        using var f = await Make();
+        await Confirm(f.As("CIM1"), Body());
+        var spec = new { kind = "New", purpose = "p", system = "MES", inputs = new { type = "object", properties = new { lotGrade = new { type = "string" }, other = new { type = "string" } } }, outputs = new { type = "object", properties = new { } } };
+        Assert.Equal(HttpStatusCode.OK, (await Agent(f).PutAsJsonAsync("/internal/tools/tool-specs/ts1", spec)).StatusCode);
+        var d = await TicketFactory.Json(await f.As("CIM1").GetAsync("/api/tickets/T-1/tool-spec-draft"));
+        var fields = d.GetProperty("steps")[0].GetProperty("naming_check").GetProperty("fields");
+        Assert.Equal(("pending", "new"), (fields.GetProperty("inputs.lotGrade").GetProperty("status").GetString(), fields.GetProperty("inputs.other").GetProperty("status").GetString()));
+    }
 }

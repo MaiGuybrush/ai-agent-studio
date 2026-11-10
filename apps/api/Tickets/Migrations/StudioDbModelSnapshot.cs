@@ -174,6 +174,48 @@ namespace AiAgentStudio.Api.Tickets.Migrations
                     b.ToTable("ticket_event", (string)null);
                 });
 
+            modelBuilder.Entity("AiAgentStudio.Api.Vocabulary.PendingTerm", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AliasesJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConfirmedByEmpNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Explanation")
+                        .HasColumnType("text");
+
+                    b.Property<int>("GiteaIssueNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("GiteaIssueUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Term")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TicketId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Term");
+
+                    b.ToTable("pending_term", (string)null);
+                });
+
             modelBuilder.Entity("AiAgentStudio.Api.Workflow.WorkflowDraft", b =>
                 {
                     b.Property<string>("TicketId")
