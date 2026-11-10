@@ -11,7 +11,7 @@ namespace AiAgentStudio.Api.Vocabulary;
 [ApiController]
 [Route("internal/tools/naming-check")]
 [AllowAnonymous]
-public class NamingCheckToolController(RunTokenService tokens, VocabularyService vocab) : ControllerBase
+public class NamingCheckToolController(RunTokenService tokens, VocabularyService vocab, PendingTermService pendingTerms) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Check([FromQuery] string[] fields, CancellationToken ct)
@@ -20,10 +20,11 @@ public class NamingCheckToolController(RunTokenService tokens, VocabularyService
         VocabularySnapshot v;
         try { v = await vocab.GetAsync(ct); }
         catch (VocabularyException e) { return StatusCode(503, new { message = ToolSpecNaming.NoCache(e.Message) }); }
+        var pending = (await pendingTerms.ActiveAsync(v.Entries, ct)).Select(x => x.Term).ToList();
         return Ok(new
         {
             sha = v.Sha, fetchedAt = v.FetchedAt, warning = v.Warning,
-            results = fields.Select(f => { var r = NamingChecker.Check(v.Entries, f); return new { field = f, status = r.Status, suggestion = r.Suggestion }; }),
+            results = fields.Select(f => { var r = NamingChecker.Check(v.Entries, f, pending: pending); return new { field = f, status = r.Status, suggestion = r.Suggestion }; }),
         });
     }
 }

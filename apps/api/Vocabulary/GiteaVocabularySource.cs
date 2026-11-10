@@ -16,6 +16,8 @@ public sealed class GiteaOptions
     public string Branch { get; set; } = "main";
     public string Path { get; set; } = "src/McpGateway.Analyzers/Tier1Vocabulary.cs";
     public string Token { get; set; } = "";
+    /// <summary>服務帳號 token，用來開 vocabulary-proposal issue（需要寫入權限）。</summary>
+    public string ProposalToken { get; set; } = "";
 }
 
 /// <summary>用 Gitea API v1 讀 main 的 commit sha 與該 sha 的檔案原文。</summary>

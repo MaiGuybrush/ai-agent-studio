@@ -46,6 +46,7 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
 
     public DbSet<AiAgentStudio.Api.Workflow.WorkflowDraft> WorkflowDrafts => Set<AiAgentStudio.Api.Workflow.WorkflowDraft>();
     public DbSet<AiAgentStudio.Api.Interviews.Interview> Interviews => Set<AiAgentStudio.Api.Interviews.Interview>();
+    public DbSet<AiAgentStudio.Api.Vocabulary.PendingTerm> PendingTerms => Set<AiAgentStudio.Api.Vocabulary.PendingTerm>();
     public DbSet<AiAgentStudio.Api.Interviews.AgentRun> AgentRuns => Set<AiAgentStudio.Api.Interviews.AgentRun>();
 
     /// <summary>啟動時清除遺留的「執行中」標記（spec 2.4）；回傳清除筆數。</summary>
@@ -80,6 +81,12 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
             e.Property(x => x.DraftJson).HasColumnType("jsonb");
             e.Property(x => x.SeenJson).HasColumnType("jsonb");
             e.Property(x => x.HumanEditsJson).HasColumnType("jsonb");
+        });
+        b.Entity<AiAgentStudio.Api.Vocabulary.PendingTerm>(e =>
+        {
+            e.ToTable("pending_term");
+            e.HasIndex(x => x.Term);
+            e.Property(x => x.AliasesJson).HasColumnType("jsonb");
         });
         b.Entity<RequirementTicket>(e =>
         {
