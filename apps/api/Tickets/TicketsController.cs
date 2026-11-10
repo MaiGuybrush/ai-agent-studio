@@ -36,6 +36,7 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
             canReopen = responsible && t.Status == TicketStatus.Cancelled,
             canReassign = me.IsCimEngineer,
             canViewConversation = me.IsCimEngineer,
+            canChat = responsible && t.Status != TicketStatus.Cancelled,
         };
     }
 

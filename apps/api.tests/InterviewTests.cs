@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using AiAgentStudio.Api.Interviews;
 using Microsoft.Extensions.DependencyInjection;
@@ -75,5 +76,18 @@ public class InterviewTests
         Assert.Equal(HttpStatusCode.Forbidden, (await f.Send("BIZ1", "x")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await f.As("SSO1").GetAsync("/api/tickets/T-1/interview")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await f.As("CIM1").GetAsync("/api/tickets/NOPE/interview")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Ticket_permissions_tell_the_ui_who_can_chat()
+    {
+        using var f = new InterviewFactory(); await f.Seed();
+        async Task<bool> CanChat(string who) =>
+            (await TicketFactory.Json(await f.As(who).GetAsync("/api/tickets/T-1"))).GetProperty("permissions").GetProperty("canChat").GetBoolean();
+        Assert.True(await CanChat("CIM1"));
+        Assert.False(await CanChat("CIM2"));
+        Assert.False(await CanChat("BIZ1"));
+        (await f.As("CIM1").PostAsJsonAsync("/api/tickets/T-1/cancel", new { reason = "x" })).EnsureSuccessStatusCode();
+        Assert.False(await CanChat("CIM1"));
     }
 }
