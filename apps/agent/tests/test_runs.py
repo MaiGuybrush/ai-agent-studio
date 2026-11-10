@@ -35,7 +35,7 @@ def events(resp):
 
 
 def client(model=None):
-    return TestClient(create_app(model=model or TestModel(custom_output_text="哈囉"), api_key="k"))
+    return TestClient(create_app(model=model or TestModel(custom_output_text="哈囉", call_tools=[]), api_key="k"))
 
 
 def test_runs_requires_api_key():
