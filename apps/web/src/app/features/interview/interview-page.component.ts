@@ -1,12 +1,16 @@
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Ticket, TicketService, errorMessage } from '../../core/tickets/ticket.service';
-import { ChatMessage, InterviewService, ToolSpec, ToolSpecDraft, WfStep, WorkflowDraft } from '../../core/interview/interview.service';
+import { ChatMessage, InterviewService, SubmissionState, ToolSpec, ToolSpecDraft, WfStep, WorkflowDraft } from '../../core/interview/interview.service';
 import { SseMessage } from '../../core/interview/sse';
 
 // spec 8.2 的 grill 流程；#17 還沒有階段進度的資料來源，先一律停在第 1 階段（之後由後端提供）。
 const STAGES = ['任務目標與觸發', '列出步驟', '對照現有工具', '補欄位與副作用', 'Naming Check／System Owner', '總結送出'];
 const TABS = ['Workflow Definition', 'Tool Spec', '評估進度'];
+// Tool Spec 狀態的顯示名稱（spec 5.1）；狀態本身由後端決定。
+const STATE_LABELS: Record<string, string> = {
+  Pending: '待評估', Feasible: '可行', Infeasible: '不可行', Conditional: '附條件', ConditionAccepted: '已接受條件', Implementing: '實作中', Implemented: '已實作',
+};
 const MAX_RECONNECT = 5;
 
 @Component({
@@ -26,6 +30,9 @@ const MAX_RECONNECT = 5;
     .human { background: #fef3c7; }
     .badge { font-size: 11px; color: #b45309; margin-left: 4px; }
     .step { border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px; margin-top: 6px; }
+    .stage.done { background: #d1fae5; color: #065f46; }
+    .pending-count { font-size: 13px; font-weight: 600; color: #b45309; }
+    .blocker-list { font-size: 12px; color: #b91c1c; margin: 4px 0 4px 16px; list-style: disc; }
     .tab { cursor: pointer; padding: 2px 10px; border: 1px solid #cbd5e1; border-radius: 4px; margin-right: 4px; }
   `],
   template: `
@@ -40,7 +47,7 @@ const MAX_RECONNECT = 5;
         }
         <h4 class="text-xs text-slate-500">階段</h4>
         @for (s of stages; track s; let i = $index) {
-          <div class="stage" [class.cur]="i === 0">{{ i + 1 }} {{ s }}</div>
+          <div class="stage" [class.cur]="i + 1 === stage()" [class.done]="i + 1 < stage()">{{ i + 1 }} {{ s }}</div>
         }
       </aside>
 
@@ -57,6 +64,18 @@ const MAX_RECONNECT = 5;
             }
           </p>
         }
+        @if (canChat() && sub(); as sb) {
+          <div class="pt-2 border-t">
+            <span class="pending-count">{{ sb.pendingCount ? '送出前待處理 ' + sb.pendingCount + ' 項' : '可以送出' }}</span>
+            @if (stage() >= 5 && sb.blockers.length) {
+              <ul class="blocker-list">@for (b of sb.blockers; track $index) { <li>{{ b.message }}</li> }</ul>
+            }
+            @if (stage() === 6 && canSubmitTicket()) {
+              <button class="submit-interview border rounded px-3 ml-2 bg-green-600 text-white" [disabled]="!sb.canSubmit || submitting()" (click)="submitInterview()">送出 Interview</button>
+            }
+            @if (submitError(); as se2) { <p class="submit-error text-sm text-red-600">{{ se2 }}</p> }
+          </div>
+        }
         @if (canChat()) {
           <form class="flex gap-2 pt-2 border-t" (submit)="submit($event)">
             <textarea name="message" rows="2" class="flex-1 border rounded p-1" [disabled]="running()"
@@ -69,7 +88,7 @@ const MAX_RECONNECT = 5;
             }
           </form>
         } @else {
-          <p class="readonly text-sm text-slate-500 pt-2 border-t">唯讀：只有負責的 CIM Engineer 能在此對話。</p>
+          <p class="readonly text-sm text-slate-500 pt-2 border-t">唯讀：只有負責的 CIM Engineer 能在訪談中對話；Interview 送出後輸入框停用。</p>
         }
       </section>
 
@@ -117,6 +136,15 @@ const MAX_RECONNECT = 5;
                   @if (canChat()) { <button class="del-spec text-red-600 ml-2" (click)="removeSpec(sp.id)">刪除</button> }
                 </div>
                 @if (missingOf(sp.id).length) { <div class="missing text-xs text-red-600">缺：{{ missingOf(sp.id).join('、') }}</div> }
+                @if (sp.kind !== 'Reuse') {
+                  <label class="block text-xs">System Owner@if (humanSpec(sp.id, 'system_owner')) { <span class="badge">人工修改</span> }
+                    <select class="owner-select w-full border rounded p-1" [disabled]="!canChat()" (change)="editSpec(sp.id, 'system_owner', val($event))">
+                      <option value="" [selected]="!sp.system_owner">（未指定）</option>
+                      @for (o of ownerOptions(sp); track o.empNo) {
+                        <option [value]="o.empNo" [selected]="o.empNo === sp.system_owner">{{ o.label }}</option>
+                      }
+                    </select></label>
+                }
                 @for (f of specFields; track f.key) {
                   <label class="block text-xs">{{ f.label }}@if (humanSpec(sp.id, f.key)) { <span class="badge">人工修改</span> }
                     <textarea class="w-full border rounded p-1" [class]="'f-' + f.key" [class.human]="humanSpec(sp.id, f.key)" [disabled]="!canChat()"
@@ -131,7 +159,18 @@ const MAX_RECONNECT = 5;
                         <span class="text-amber-700">建議改名 → <b>{{ n.suggestion }}</b></span>
                         @if (canChat()) { <button class="apply-rename border rounded px-1 ml-1" (click)="applyRename(sp.id, n.path, n.suggestion!)">改成標準名</button> }
                       }
-                      @default { <span class="text-blue-700">新名詞（待 CIM Engineer 確認）</span> }
+                      @case ('pending') { <span class="text-slate-600">Pending Term（已提案，視為已知）</span> }
+                      @default {
+                        <span class="text-blue-700">新名詞（待 CIM Engineer 確認）</span>
+                        @if (canChat()) {
+                          <input class="term-explanation border rounded px-1 ml-1" placeholder="說明（必填）" [value]="explained(n.path)" (input)="explain(n.path, val($event))" />
+                          <button class="confirm-term border rounded px-1 ml-1" [disabled]="!explained(n.path).trim()" (click)="confirmTerm(n.path)">確認新名詞</button>
+                        }
+                        @if (confirmError(); as ce) { <span class="text-red-600">{{ ce }}</span> }
+                      }
+                    }
+                    @if (n.status === 'rename' && canChat()) {
+                      <input class="rename-reason border rounded px-1 ml-1" placeholder="不改名的理由" [value]="sp.naming_reasons?.[n.path] ?? ''" (input)="setReason(sp.id, n.path, val($event))" />
                     }
                   </div>
                 }
@@ -151,7 +190,13 @@ const MAX_RECONNECT = 5;
             }
           </div>
         } @else {
-          <p class="text-sm text-slate-500 mt-4">此分頁內容會在後續功能加入。</p>
+          <div class="progress mt-2">
+            @for (r of sub()?.toolSpecs ?? []; track r.specId) {
+              <div class="progress-row step text-sm">{{ r.specId }}　<b>{{ r.kind }}</b>　rev {{ r.revision }}　<span>{{ stateLabel(r.state) }}</span></div>
+            } @empty {
+              <p class="text-sm text-slate-500">尚未送出；送出後在此追蹤各 Tool Spec 的評估與實作進度。</p>
+            }
+          </div>
         }
       </aside>
     </div>
@@ -179,10 +224,15 @@ export class InterviewPageComponent {
   readonly specError = signal<string | null>(null);
   readonly vocab = signal<ToolSpecDraft['vocabulary']>(null);
   readonly vocabError = signal<string | null>(null);
+  readonly sub = signal<SubmissionState | null>(null);
+  readonly submitting = signal(false);
+  readonly submitError = signal<string | null>(null);
+  readonly confirmError = signal<string | null>(null);
+  readonly explanations = signal<Record<string, string>>({});
   private specDraft: ToolSpecDraft | null = null;
   /** 畫面上可直接編輯的文字欄位；inputs／outputs 等結構化欄位目前只顯示，修改請對 agent 說。 */
   readonly specFields = [
-    { key: 'purpose', label: '用途說明' }, { key: 'system_owner', label: 'System Owner（工號）' },
+    { key: 'purpose', label: '用途說明' },
     { key: 'expected_tool_name', label: '預期工具名稱' }, { key: 'accepted_condition', label: '已接受的條件' },
   ] as const;
   private lastEventId: string | null = null;
@@ -191,6 +241,68 @@ export class InterviewPageComponent {
     void this.init();
   }
 
+  /** 目前階段（後端算出）；送出後固定在最後一階段。 */
+  stage(): number {
+    return this.sub()?.stage ?? 1;
+  }
+  stateLabel(state: string): string {
+    return STATE_LABELS[state] ?? state;
+  }
+  async refreshSubmission(): Promise<void> {
+    try { this.sub.set(await this.interview.submissionState(this.id)); } catch { /* 載入失敗不影響對話 */ }
+  }
+  /** 選項為系統對照表的所有 System Owner；與此 spec 的系統對應者標示為 agent 的建議，目前值若不在表內仍保留。 */
+  ownerOptions(sp: ToolSpec): { empNo: string; label: string }[] {
+    const list = this.sub()?.suggestedOwners ?? [];
+    const opts = new Map<string, string>();
+    for (const o of list) {
+      const base = `${o.name ?? o.empNo}（${o.empNo}）`;
+      const suggested = o.system === sp.system;
+      if (suggested || !opts.has(o.empNo)) opts.set(o.empNo, suggested ? `${base} ★ agent 建議` : base);
+    }
+    if (sp.system_owner && !opts.has(sp.system_owner)) opts.set(sp.system_owner, sp.system_owner);
+    return [...opts].map(([empNo, label]) => ({ empNo, label }));
+  }
+  explained(path: string): string {
+    return this.explanations()[path] ?? '';
+  }
+  explain(path: string, v: string): void {
+    this.explanations.update((m) => ({ ...m, [path]: v }));
+  }
+  /** 確認新名詞（說明必填，後端會再驗一次）；成功後重新載入，欄位狀態會變成 pending。 */
+  async confirmTerm(path: string): Promise<void> {
+    const term = path.split('.').pop()!.replace(/\[\]$/, '');
+    this.confirmError.set(null);
+    try {
+      await this.interview.confirmTerm(this.id, term, (this.explanations()[path] ?? '').trim());
+      await this.loadSpecs();
+    } catch (e) {
+      this.confirmError.set(errorMessage(e, '確認新名詞失敗。'));
+    }
+  }
+  setReason(id: string, path: string, v: string): void {
+    this.specs.update((l) => l.map((s) => (s.id === id ? { ...s, naming_reasons: { ...s.naming_reasons, [path]: v } } : s)));
+    this.specsDirty.set(true);
+  }
+  async submitInterview(): Promise<void> {
+    this.submitting.set(true);
+    this.submitError.set(null);
+    try {
+      await this.interview.submit(this.id);
+      this.ticket.set(await this.tickets.get(this.id));
+      await this.refreshSubmission();
+      this.tab.set(2);
+    } catch (e) {
+      this.submitError.set(errorMessage(e, '送出失敗。'));
+      await this.refreshSubmission();
+    } finally {
+      this.submitting.set(false);
+    }
+  }
+
+  canSubmitTicket(): boolean {
+    return !!this.ticket()?.permissions.canSubmit;
+  }
   canChat(): boolean {
     return !!this.ticket()?.permissions.canChat;
   }
@@ -254,6 +366,7 @@ export class InterviewPageComponent {
       this.vocab.set(d.vocabulary ?? null);
       this.vocabError.set(d.vocabularyError ?? null);
       this.specsDirty.set(false);
+      void this.refreshSubmission();
     } catch { /* 載入失敗不影響對話 */ }
   }
   async saveSpecs(): Promise<void> {
@@ -265,6 +378,7 @@ export class InterviewPageComponent {
       this.vocab.set(d.vocabulary ?? null);
       this.vocabError.set(d.vocabularyError ?? null);
       this.specsDirty.set(false);
+      void this.refreshSubmission();
     } catch (e) {
       if ((e as { status?: number }).status === 409) {
         this.specError.set('Tool Spec 已被更新（agent 或其他人剛修改），已載入最新版本，請確認後重新修改。');
@@ -322,7 +436,8 @@ export class InterviewPageComponent {
       const [t, c] = await Promise.all([this.tickets.get(this.id), this.interview.conversation(this.id)]);
       this.ticket.set(t);
       this.messages.set(c.messages);
-      await Promise.all([this.loadDraft(), this.loadSpecs()]);
+      await Promise.all([this.loadDraft(), this.loadSpecs(), this.refreshSubmission()]);
+      if (this.sub()?.submissions.length && !t.permissions.canChat) this.tab.set(2);
       if (c.running) await this.consume(() => this.interview.reconnect(this.id, null));
     } catch (e) {
       this.error.set(errorMessage(e, '無法載入 Interview。'));

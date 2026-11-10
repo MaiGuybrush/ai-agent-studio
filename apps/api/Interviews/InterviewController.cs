@@ -50,6 +50,7 @@ public class InterviewController(ICurrentUserService user, IdentityService ident
         if (t is null) return NotFound();
         if (t.CimEngineerEmpNo != me.EmpNo) return Forbid();
         if (t.Status == TicketStatus.Cancelled) return Problem("需求單已取消，無法對話。", statusCode: 409);
+        if (t.Status != TicketStatus.Interviewing) return Problem("Interview 已送出，無法再對話。", statusCode: 409);
         var run = runner.TryReserve(ticketId, me.EmpNo);
         if (run is null) return Problem("上一個回覆尚未結束，請等待或先中止。", statusCode: 409);
         try

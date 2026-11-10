@@ -31,7 +31,7 @@ export interface WorkflowDraft {
 
 /** Tool Spec 草稿（#21）：欄位見 spec 6.2；inputs／outputs 為 JSON Schema 子集。 */
 export interface NamingResult {
-  status: 'pass' | 'rename' | 'new';
+  status: 'pass' | 'pending' | 'rename' | 'new';
   suggestion?: string;
 }
 
@@ -41,6 +41,8 @@ export interface ToolSpec {
   purpose?: string;
   system?: string;
   system_owner?: string;
+  /** 建議改名但不改時的理由，記在欄位上：欄位路徑 → 理由（送出條件，spec 8.5）。 */
+  naming_reasons?: Record<string, string>;
   side_effect?: 'read' | 'write';
   inputs?: unknown;
   /** 後端算出：每個欄位（含巢狀）的 Naming Check 結果與詞彙 sha，欄位路徑如 inputs.lots[].state。 */
@@ -57,6 +59,23 @@ export interface ToolSpecDraft {
   missing: Record<string, string[]>; // 每份 Tool Spec 還缺的必填欄位
   vocabulary?: { sha: string; fetchedAt: string; warning?: string | null } | null; // 目前使用的詞彙版本；warning 表示沿用舊版
   vocabularyError?: string | null; // 完全沒有詞彙時，Naming Check 暫停的原因
+}
+
+/** 阻擋送出的一項待處理事項（後端算好；前端只顯示）。 */
+export interface Blocker {
+  code: 'no_tool_specs' | 'missing_field' | 'owner' | 'new_term' | 'rename_reason' | 'naming_unavailable';
+  message: string;
+  specId?: string | null;
+  path?: string | null;
+}
+export interface SubmissionState {
+  blockers: Blocker[];
+  pendingCount: number;
+  stage: number; // 1..6，第 5、6 階段才展開完整阻擋清單
+  canSubmit: boolean;
+  suggestedOwners: { system: string; empNo: string; name: string | null }[]; // 系統對照表的建議
+  toolSpecs: { specId: string; kind: string; state: string; revision: number }[]; // 已送出的 Tool Spec 目前狀態
+  submissions: { number: number }[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -89,6 +108,20 @@ export class InterviewService {
 
   saveToolSpecDraft(ticketId: string, version: number, steps: ToolSpec[]): Promise<ToolSpecDraft> {
     return firstValueFrom(this.http.put<ToolSpecDraft>(this.draftUrl(ticketId, 'tool-spec-draft'), { version, steps }));
+  }
+
+  submissionState(ticketId: string): Promise<SubmissionState> {
+    return firstValueFrom(this.http.get<SubmissionState>(this.draftUrl(ticketId, 'submission')));
+  }
+
+  /** 送出 Interview；有阻擋事項時後端回 409。 */
+  submit(ticketId: string): Promise<{ number: number; status: string }> {
+    return firstValueFrom(this.http.post<{ number: number; status: string }>(this.draftUrl(ticketId, 'submit'), {}));
+  }
+
+  /** 確認新名詞（只有負責的 CIM Engineer；說明必填）→ 成為 Pending Term。 */
+  confirmTerm(ticketId: string, term: string, explanation: string): Promise<unknown> {
+    return firstValueFrom(this.http.post(this.draftUrl(ticketId, 'pending-terms'), { term, explanation }));
   }
 
   private draftUrl(ticketId: string, doc = 'workflow-draft'): string {

@@ -8,7 +8,15 @@ public static class TicketStatus
 {
     public const string Interviewing = "Interviewing"; // 訪談中
     public const string Cancelled = "Cancelled";       // 已取消
-    public static string Label(string s) => s == Cancelled ? "已取消" : "訪談中";
+    /// <summary>已送出：只是「不在訪談中」的標記，顯示用的狀態由 Tool Spec 推導（<c>TicketStatusDeriver</c>）。</summary>
+    public const string Submitted = "Submitted";
+    public const string Evaluating = "Evaluating";     // 評估中（推導）
+    public const string Implementing = "Implementing"; // 實作中（推導）
+    public const string Completed = "Completed";       // 已完成（推導）
+    public static string Label(string s) => s switch
+    {
+        Cancelled => "已取消", Evaluating => "評估中", Implementing => "實作中", Completed => "已完成", _ => "訪談中",
+    };
 }
 
 /// <summary>需求單（spec 13）。只存人觸發的狀態；其餘狀態之後由 Tool Spec 推導。</summary>
@@ -49,6 +57,10 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
     public DbSet<AiAgentStudio.Api.Vocabulary.PendingTerm> PendingTerms => Set<AiAgentStudio.Api.Vocabulary.PendingTerm>();
     public DbSet<AiAgentStudio.Api.Interviews.AgentRun> AgentRuns => Set<AiAgentStudio.Api.Interviews.AgentRun>();
 
+    public DbSet<AiAgentStudio.Api.Submissions.Submission> Submissions => Set<AiAgentStudio.Api.Submissions.Submission>();
+    public DbSet<AiAgentStudio.Api.Submissions.ToolSpecRevision> ToolSpecRevisions => Set<AiAgentStudio.Api.Submissions.ToolSpecRevision>();
+    public DbSet<AiAgentStudio.Api.Submissions.ToolSpecRecord> ToolSpecRecords => Set<AiAgentStudio.Api.Submissions.ToolSpecRecord>();
+
     /// <summary>啟動時清除遺留的「執行中」標記（spec 2.4）；回傳清除筆數。</summary>
     public int ClearStaleRunning()
     {
@@ -87,6 +99,24 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
             e.ToTable("pending_term");
             e.HasIndex(x => x.Term);
             e.Property(x => x.AliasesJson).HasColumnType("jsonb");
+        });
+        b.Entity<AiAgentStudio.Api.Submissions.Submission>(e =>
+        {
+            e.ToTable("submission");
+            e.HasIndex(x => new { x.TicketId, x.Number }).IsUnique();
+            e.Property(x => x.WorkflowJson).HasColumnType("jsonb");
+        });
+        b.Entity<AiAgentStudio.Api.Submissions.ToolSpecRevision>(e =>
+        {
+            e.ToTable("tool_spec_revision");
+            e.HasIndex(x => new { x.TicketId, x.SpecId, x.Revision }).IsUnique();
+            e.Property(x => x.ContentJson).HasColumnType("jsonb");
+        });
+        b.Entity<AiAgentStudio.Api.Submissions.ToolSpecRecord>(e =>
+        {
+            e.ToTable("tool_spec");
+            e.HasKey(x => new { x.TicketId, x.SpecId });
+            e.Property(x => x.TicketId).HasMaxLength(64);
         });
         b.Entity<RequirementTicket>(e =>
         {

@@ -6,7 +6,7 @@ import { TicketCreateComponent } from './ticket-create.component';
 import { TicketDetailComponent } from './ticket-detail.component';
 
 const none: TicketPermissions = {
-  canCancel: false, canReopen: false, canReassign: false, canViewConversation: false, canChat: false,
+  canCancel: false, canReopen: false, canReassign: false, canViewConversation: false, canChat: false, canSubmit: false,
 };
 function ticket(p: Partial<TicketPermissions> = {}, o: Partial<Ticket> = {}): Ticket {
   return {

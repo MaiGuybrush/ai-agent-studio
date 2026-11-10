@@ -100,6 +100,91 @@ namespace AiAgentStudio.Api.Tickets.Migrations
                     b.ToTable("interview", (string)null);
                 });
 
+            modelBuilder.Entity("AiAgentStudio.Api.Submissions.Submission", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SubmittedByEmpNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TicketId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WorkflowJson")
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId", "Number")
+                        .IsUnique();
+
+                    b.ToTable("submission", (string)null);
+                });
+
+            modelBuilder.Entity("AiAgentStudio.Api.Submissions.ToolSpecRecord", b =>
+                {
+                    b.Property<string>("TicketId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SpecId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CurrentRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .HasColumnType("text");
+
+                    b.Property<string>("State")
+                        .HasColumnType("text");
+
+                    b.HasKey("TicketId", "SpecId");
+
+                    b.ToTable("tool_spec", (string)null);
+                });
+
+            modelBuilder.Entity("AiAgentStudio.Api.Submissions.ToolSpecRevision", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ContentJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SpecId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("SubmissionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TicketId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId", "SpecId", "Revision")
+                        .IsUnique();
+
+                    b.ToTable("tool_spec_revision", (string)null);
+                });
+
             modelBuilder.Entity("AiAgentStudio.Api.Tickets.RequirementTicket", b =>
                 {
                     b.Property<string>("Id")
@@ -185,11 +270,11 @@ namespace AiAgentStudio.Api.Tickets.Migrations
                     b.Property<string>("AliasesJson")
                         .HasColumnType("jsonb");
 
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("ConfirmedByEmpNo")
                         .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Explanation")
                         .HasColumnType("text");
