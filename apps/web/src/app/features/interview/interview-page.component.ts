@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Ticket, TicketService, errorMessage } from '../../core/tickets/ticket.service';
 import { ChatMessage, InterviewService, SubmissionState, ToolSpec, ToolSpecDraft, WfStep, WorkflowDraft } from '../../core/interview/interview.service';
+import { SpecCommentsComponent } from '../reviews/spec-comments.component';
 import { SseMessage } from '../../core/interview/sse';
 
 // spec 8.2 的 grill 流程；#17 還沒有階段進度的資料來源，先一律停在第 1 階段（之後由後端提供）。
@@ -16,7 +17,7 @@ const MAX_RECONNECT = 5;
 @Component({
   selector: 'app-interview-page',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, SpecCommentsComponent],
   styles: [`
     .grid3 { display: grid; grid-template-columns: 260px 1fr 460px; gap: 10px; padding: 10px; height: calc(100vh - 140px); }
     .grid3 > * { overflow: auto; min-height: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; }
@@ -175,6 +176,7 @@ const MAX_RECONNECT = 5;
                   </div>
                 }
                 <div class="text-xs text-slate-500">輸入：{{ json(sp.inputs) }}　輸出：{{ json(sp.outputs) }}</div>
+                @if (isSubmitted(sp.id)) { <app-spec-comments [ticketId]="id" [specId]="sp.id" /> }
               </div>
             } @empty {
               <p class="text-sm text-slate-500">尚無 Tool Spec；agent 會在訪談中逐份建立。</p>
@@ -223,7 +225,12 @@ const MAX_RECONNECT = 5;
 export class InterviewPageComponent {
   private readonly tickets = inject(TicketService);
   private readonly interview = inject(InterviewService);
-  private readonly id = inject(ActivatedRoute).snapshot.paramMap.get('id')!;
+  readonly id = inject(ActivatedRoute).snapshot.paramMap.get('id')!;
+
+  /** 已送出（有 tool_spec 紀錄）且非 Reuse 的 Tool Spec 才有留言串。 */
+  isSubmitted(specId: string): boolean {
+    return !!this.sub()?.toolSpecs.some((r) => r.specId === specId && r.kind !== 'Reuse');
+  }
 
   readonly stages = STAGES;
   readonly tabs = TABS;

@@ -3,6 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { JsonPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { errorMessage } from '../../core/tickets/ticket.service';
+import { SpecCommentsComponent } from './spec-comments.component';
 import { ReviewDetail, ReviewReply, ReviewService } from '../../core/reviews/review.service';
 
 /**
@@ -12,7 +13,7 @@ import { ReviewDetail, ReviewReply, ReviewService } from '../../core/reviews/rev
 @Component({
   selector: 'app-review-page',
   standalone: true,
-  imports: [FormsModule, JsonPipe],
+  imports: [FormsModule, JsonPipe, SpecCommentsComponent],
   template: `
     <div class="p-4 max-w-4xl">
       @if (error(); as e) {
@@ -36,6 +37,8 @@ import { ReviewDetail, ReviewReply, ReviewService } from '../../core/reviews/rev
             }
           </ul>
         }
+
+        <app-spec-comments [ticketId]="d.ticketId" [specId]="d.specId" />
 
         @if (d.canReply) {
           <form class="reply grid gap-2" (ngSubmit)="submit()">

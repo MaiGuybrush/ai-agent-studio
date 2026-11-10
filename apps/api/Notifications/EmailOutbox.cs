@@ -39,6 +39,8 @@ public static class EmailEvents
     public const string Submitted = "Submitted";     // 送出（首次）→ System Owner
     public const string Resubmitted = "Resubmitted"; // 重評 → System Owner
     public const string Replied = "Replied";         // 回覆評估結果 → CIM Engineer
+    public const string Commented = "Commented";     // 有新留言 → 對方（CIM Engineer 或 System Owner）
+    public const string OwnerReassigned = "OwnerReassigned"; // 轉派／改派 System Owner → 新的 System Owner
 }
 
 public sealed record EmailMessage(string To, string Subject, string Html, string IdempotencyKey);

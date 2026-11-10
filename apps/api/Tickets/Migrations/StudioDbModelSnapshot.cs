@@ -188,6 +188,46 @@ namespace AiAgentStudio.Api.Tickets.Migrations
                     b.ToTable("feasibility_review", (string)null);
                 });
 
+            modelBuilder.Entity("AiAgentStudio.Api.Submissions.ReviewAssignment", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ByEmpNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromEmpNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SpecId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TicketId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ToEmpNo")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId", "SpecId");
+
+                    b.ToTable("review_assignment", (string)null);
+                });
+
             modelBuilder.Entity("AiAgentStudio.Api.Submissions.Submission", b =>
                 {
                     b.Property<long>("Id")
@@ -217,6 +257,40 @@ namespace AiAgentStudio.Api.Tickets.Migrations
                         .IsUnique();
 
                     b.ToTable("submission", (string)null);
+                });
+
+            modelBuilder.Entity("AiAgentStudio.Api.Submissions.ToolSpecComment", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AuthorEmpNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Body")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SpecId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TicketId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId", "SpecId");
+
+                    b.ToTable("tool_spec_comment", (string)null);
                 });
 
             modelBuilder.Entity("AiAgentStudio.Api.Submissions.ToolSpecRecord", b =>
