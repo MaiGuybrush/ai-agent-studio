@@ -180,6 +180,12 @@ namespace AiAgentStudio.Api.Tickets.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("Doc")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("steps");
+
                     b.Property<string>("DraftJson")
                         .HasColumnType("jsonb");
 
@@ -193,7 +199,7 @@ namespace AiAgentStudio.Api.Tickets.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
 
-                    b.HasKey("TicketId");
+                    b.HasKey("TicketId", "Doc");
 
                     b.ToTable("workflow_draft", (string)null);
                 });

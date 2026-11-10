@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using AiAgentStudio.Api.Identity;
 using AiAgentStudio.Api.Interviews;
 using AiAgentStudio.Api.Services;
+using AiAgentStudio.Api.Studio;
 using AiAgentStudio.Api.Tickets;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,9 +17,9 @@ public record SaveDraftRequest(int Version, JsonArray? Steps);
 
 /// <summary>CIM Engineer 直接編輯草稿（spec 8.4）。讀：任何 CIM Engineer；寫：負責的 CIM Engineer，且帶版本號。</summary>
 [ApiController]
-[Route("api/tickets/{ticketId}/workflow-draft")]
+[Route("api/tickets/{ticketId}")]
 [Authorize]
-public class WorkflowDraftController(ICurrentUserService user, IdentityService identity, StudioDb db, WorkflowDraftService drafts) : ControllerBase
+public class WorkflowDraftController(ICurrentUserService user, IdentityService identity, StudioDb db, WorkflowDraftService drafts, StudioConfigProvider config) : ControllerBase
 {
     async Task<UserIdentity?> WhoAsync(CancellationToken ct)
     {
@@ -27,16 +28,33 @@ public class WorkflowDraftController(ICurrentUserService user, IdentityService i
         return await identity.GetAsync(empNo, jwt, ct);
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Get(string ticketId, CancellationToken ct)
+    [HttpGet("workflow-draft")]
+    public Task<IActionResult> Get(string ticketId, CancellationToken ct) => GetDoc(ticketId, WorkflowDraft.StepsDoc, ct);
+
+    [HttpPut("workflow-draft")]
+    public Task<IActionResult> Save(string ticketId, SaveDraftRequest req, CancellationToken ct) => SaveDoc(ticketId, req, WorkflowDraft.StepsDoc, ct);
+
+    /// <summary>Tool Spec 草稿（#21）：同一套讀寫與版本檢查，回應多一個 missing（每個 spec 還缺哪些必填欄位）。</summary>
+    [HttpGet("tool-spec-draft")]
+    public Task<IActionResult> GetSpecs(string ticketId, CancellationToken ct) => GetDoc(ticketId, WorkflowDraft.ToolSpecsDoc, ct);
+
+    [HttpPut("tool-spec-draft")]
+    public Task<IActionResult> SaveSpecs(string ticketId, SaveDraftRequest req, CancellationToken ct) => SaveDoc(ticketId, req, WorkflowDraft.ToolSpecsDoc, ct);
+
+    static object Shape(DraftView v, string coll) => coll != WorkflowDraft.ToolSpecsDoc ? v : new
+    {
+        v.Version, v.Steps, v.HumanEdits,
+        Missing = v.Steps.OfType<JsonObject>().ToDictionary(s => s["id"]!.GetValue<string>(), s => ToolSpecRules.Missing(s)),
+    };
+
+    async Task<IActionResult> GetDoc(string ticketId, string coll, CancellationToken ct)
     {
         if (await WhoAsync(ct) is not { IsCimEngineer: true }) return Forbid();
         if (!await db.Tickets.AnyAsync(x => x.Id == ticketId, ct)) return NotFound();
-        return Ok(await drafts.GetAsync(ticketId));
+        return Ok(Shape(await drafts.GetAsync(ticketId, coll), coll));
     }
 
-    [HttpPut]
-    public async Task<IActionResult> Save(string ticketId, SaveDraftRequest req, CancellationToken ct)
+    async Task<IActionResult> SaveDoc(string ticketId, SaveDraftRequest req, string coll, CancellationToken ct)
     {
         if (await WhoAsync(ct) is not { IsCimEngineer: true } me) return Forbid();
         var t = await db.Tickets.AsNoTracking().FirstOrDefaultAsync(x => x.Id == ticketId, ct);
@@ -45,9 +63,12 @@ public class WorkflowDraftController(ICurrentUserService user, IdentityService i
         if (t.Status == TicketStatus.Cancelled) return Problem("需求單已取消，無法編輯。", statusCode: 409);
         var ids = req.Steps?.Select(s => (s as JsonObject)?["id"]?.GetValue<string>()).ToList();
         if (req.Steps is null || ids!.Any(string.IsNullOrWhiteSpace) || ids!.Distinct().Count() != ids!.Count)
-            return Problem("steps 的每一步都需要唯一的 id。", statusCode: 400);
-        var r = await drafts.HumanSaveAsync(ticketId, req.Version, req.Steps);
-        return r.Saved ? Ok(r.Current) : Conflict(new { title = "草稿已被更新，請重新載入後再修改。", current = r.Current });
+            return Problem("每一筆都需要唯一的 id。", statusCode: 400);
+        if (coll == WorkflowDraft.ToolSpecsDoc)
+            foreach (var s in req.Steps.OfType<JsonObject>())
+                if (ToolSpecRules.Validate(s, config.Current.Systems.Keys) is { } err) return Problem($"{s["id"]}：{err}", statusCode: 400);
+        var r = await drafts.HumanSaveAsync(ticketId, req.Version, req.Steps, coll);
+        return r.Saved ? Ok(Shape(r.Current, coll)) : Conflict(new { title = "草稿已被更新，請重新載入後再修改。", current = Shape(r.Current, coll) });
     }
 }
 
