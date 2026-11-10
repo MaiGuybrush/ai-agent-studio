@@ -81,8 +81,11 @@ public class FeasibilityReviewController(ICurrentUserService user, StudioDb db, 
         var (t, rec, rev) = ctx.Value;
         var sub = await db.Submissions.AsNoTracking().FirstAsync(s => s.TicketId == ticketId && s.Number == rev.SubmissionNumber, ct);
         var history = await db.FeasibilityReviews.AsNoTracking().Where(h => h.TicketId == ticketId && h.SpecId == specId).OrderBy(h => h.Id).ToListAsync(ct);
+        var prev = await db.ToolSpecRevisions.AsNoTracking().Where(r => r.TicketId == ticketId && r.SpecId == specId && r.Revision < rev.Revision).OrderByDescending(r => r.Revision).FirstOrDefaultAsync(ct);
         return Ok(new
         {
+            // 與同一份 Tool Spec 上一個 revision 的差異（spec 6.5）；第一版為 null
+            diff = prev is null ? null : new { fromRevision = prev.Revision, changes = RevisionDiff.Between(prev.ContentJson, rev.ContentJson) },
             ticketId, specId, revision = rev.Revision, kind = rec.Kind, state = rec.State, canReply = CanReply(t, rec),
             content = JsonNode.Parse(rev.ContentJson), workflow = JsonNode.Parse(sub.WorkflowJson),
             cimEngineerName = t.CimEngineerName, businessUserName = t.BusinessUserName, submittedAt = sub.At,

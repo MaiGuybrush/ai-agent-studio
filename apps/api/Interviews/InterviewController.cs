@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AiAgentStudio.Api.Submissions;
 using System.Threading;
 using System.Threading.Tasks;
 using AiAgentStudio.Api.Identity;
@@ -22,8 +23,53 @@ public record SendMessageRequest(string? Text);
 [ApiController]
 [Route("api/tickets/{ticketId}/interview")]
 [Authorize]
-public class InterviewController(ICurrentUserService user, IdentityService identity, StudioDb db, InterviewRunner runner, TimeProvider time) : ControllerBase
+public class InterviewController(ICurrentUserService user, IdentityService identity, StudioDb db, InterviewRunner runner, TimeProvider time, AiAgentStudio.Api.Workflow.WorkflowDraftService drafts) : ControllerBase
 {
+    public record ReopenRequest(string? Reason);
+
+    /// <summary>
+    /// 重開 Interview（spec 5.3-3、8.6）：負責的 CIM Engineer、須附原因；任何已送出的狀態（含已完成）都可以。
+    /// 開一筆新的 interview（新對話，開場脈絡 = 上次送出的快照＋原因），舊的保留；需求單的儲存標記回到訪談中，顯示狀態重新推導。
+    /// </summary>
+    [HttpPost("reopen")]
+    public async Task<IActionResult> Reopen(string ticketId, ReopenRequest req, CancellationToken ct)
+    {
+        if (await WhoAsync(ct) is not { IsCimEngineer: true } me) return Forbid();
+        var t = await db.Tickets.FirstOrDefaultAsync(x => x.Id == ticketId, ct);
+        if (t is null) return NotFound();
+        if (t.CimEngineerEmpNo != me.EmpNo) return Forbid();
+        if (string.IsNullOrWhiteSpace(req.Reason)) return Problem("重開須附原因。", statusCode: 400);
+        if (t.Status == TicketStatus.Cancelled) return Problem("需求單已取消，請先重開取消。", statusCode: 409);
+        if (t.Status == TicketStatus.Interviewing) return Problem("需求單仍在訪談中，無須重開。", statusCode: 409);
+        var reason = req.Reason.Trim();
+
+        var sub = await db.Submissions.AsNoTracking().Where(x => x.TicketId == ticketId).OrderByDescending(x => x.Number).FirstAsync(ct);
+        var recs = await db.ToolSpecRecords.AsNoTracking().Where(r => r.TicketId == ticketId).ToListAsync(ct);
+        var revs = await db.ToolSpecRevisions.AsNoTracking().Where(r => r.TicketId == ticketId).ToListAsync(ct);
+        var specs = new JsonArray();
+        var draftSpecs = (await drafts.GetAsync(ticketId, AiAgentStudio.Api.Workflow.WorkflowDraft.ToolSpecsDoc)).Steps.OfType<JsonObject>().ToList();
+        foreach (var r in recs.OrderBy(r => r.SpecId))
+        {
+            var content = (JsonObject)JsonNode.Parse(revs.First(v => v.SpecId == r.SpecId && v.Revision == r.CurrentRevision).ContentJson)!;
+            specs.Add(new JsonObject { ["id"] = r.SpecId, ["revision"] = r.CurrentRevision, ["state"] = r.State, ["content"] = content.DeepClone() });
+            // 草稿以最新 revision 為準（含 #28 送出後的修改）；只在內容真的不同時才同步，避免無謂遞增版本
+            static JsonObject Norm(JsonObject o) { var c = (JsonObject)o.DeepClone(); c.Remove("id"); c.Remove("naming_check"); c.Remove("system_owner_name"); return c; }
+            if (draftSpecs.FirstOrDefault(d => d["id"]?.GetValue<string>() == r.SpecId) is not { } cur || !JsonNode.DeepEquals(Norm(cur), Norm(content)))
+                await drafts.SyncSpecAsync(ticketId, r.SpecId, content);
+        }
+        var context = new JsonObject
+        {
+            ["reopen_reason"] = reason, ["submission_number"] = sub.Number,
+            ["workflow"] = JsonNode.Parse(sub.WorkflowJson), ["tool_specs"] = specs,
+        };
+        db.Interviews.Add(new Interview { TicketId = ticketId, ReopenReason = reason, OpeningContext = context.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }), CreatedAt = time.GetUtcNow() });
+        db.TicketEvents.Add(new TicketEvent { TicketId = ticketId, Type = "ReopenInterview", ActorEmpNo = me.EmpNo, At = time.GetUtcNow(), FromValue = t.Status, ToValue = TicketStatus.Interviewing, Reason = reason });
+        t.Status = TicketStatus.Interviewing;
+        await db.SaveChangesAsync(ct);
+        await drafts.ClearHumanEditsAsync(ticketId); // 人工修改標記在新一次 Interview 重新開始
+        return Ok(new { status = TicketStatus.Label(TicketStatus.Interviewing) });
+    }
+
     async Task<UserIdentity?> WhoAsync(CancellationToken ct)
     {
         if (user.EmpNo is not { } empNo) return null;
@@ -38,7 +84,22 @@ public class InterviewController(ICurrentUserService user, IdentityService ident
         if (await WhoAsync(ct) is not { IsCimEngineer: true }) return Forbid();
         if (!await db.Tickets.AnyAsync(x => x.Id == ticketId, ct)) return NotFound();
         var iv = await db.Interviews.AsNoTracking().Where(x => x.TicketId == ticketId).OrderByDescending(x => x.Id).FirstOrDefaultAsync(ct);
-        return Ok(new { running = runner.Find(ticketId) != null, messages = iv is null ? [] : Display(iv.ConversationJson) });
+        var previous = await db.Interviews.AsNoTracking().Where(x => x.TicketId == ticketId && (iv == null || x.Id != iv.Id)).OrderByDescending(x => x.Id)
+            .Select(x => new { x.Id, x.ReopenReason, x.CreatedAt }).ToListAsync(ct);
+        return Ok(new
+        {
+            running = runner.Find(ticketId) != null, messages = iv is null ? [] : Display(iv.ConversationJson),
+            interviewId = iv?.Id, reopenReason = iv?.ReopenReason, openingContext = iv?.ReopenReason is null ? null : iv.OpeningContext, previous, // 舊對話連結（spec 8.6）
+        });
+    }
+
+    /// <summary>讀指定的（舊）對話：任何 CIM Engineer。</summary>
+    [HttpGet("{interviewId:long}")]
+    public async Task<IActionResult> GetOne(string ticketId, long interviewId, CancellationToken ct)
+    {
+        if (await WhoAsync(ct) is not { IsCimEngineer: true }) return Forbid();
+        var iv = await db.Interviews.AsNoTracking().FirstOrDefaultAsync(x => x.TicketId == ticketId && x.Id == interviewId, ct);
+        return iv is null ? NotFound() : Ok(new { interviewId = iv.Id, reopenReason = iv.ReopenReason, createdAt = iv.CreatedAt, messages = Display(iv.ConversationJson) });
     }
 
     /// <summary>送訊息並以 SSE 串流本回合回覆。text 為空 = 重試上一則未得到回覆的使用者訊息。</summary>
