@@ -1,0 +1,15 @@
+{
+  "appTitle": "ai-agent-studio-web",
+  "authApiUrl": "http://localhost:5090/auth",
+  "apiBaseUrl": "http://localhost:5080",
+  "mockAuth": false,
+  "modulesInfo": [
+    {
+      "moduleName": "Dashboard",
+      "version": "1.0.0",
+      "owner": "Local Developer",
+      "extNo": "12345",
+      "routePattern": "^/dashboard"
+    }
+  ]
+}

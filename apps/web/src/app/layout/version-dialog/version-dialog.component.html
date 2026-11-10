@@ -1,0 +1,77 @@
+@if (isOpen()) {
+  <div class="version-modal-backdrop" tabindex="-1" (keydown.escape)="close()">
+    <button
+      type="button"
+      class="backdrop-dismiss-overlay"
+      aria-label="關閉對話框"
+      (click)="close()"
+    ></button>
+
+    <div
+      class="version-modal-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="version-dialog-title"
+    >
+      <header class="dialog-header">
+        <div class="header-title-wrap">
+          <svg
+            class="header-icon"
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
+            ></path>
+          </svg>
+          <h2 id="version-dialog-title" class="dialog-title">版本更新說明</h2>
+        </div>
+        <button type="button" class="btn-close" (click)="close()" aria-label="關閉">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </header>
+
+      <div class="dialog-body">
+        <div class="version-timeline">
+          @for (version of displayVersions(); track version) {
+            <div class="timeline-item">
+              <div class="timeline-marker">
+                <div class="timeline-dot" [class.new]="isUnread(version)"></div>
+                <div class="timeline-line"></div>
+              </div>
+              <div class="timeline-card">
+                <div class="card-header">
+                  <div class="version-badge-wrap">
+                    <span class="version-tag">v{{ version }}</span>
+                    @if (isUnread(version)) {
+                      <span class="badge-new">NEW</span>
+                    }
+                  </div>
+                </div>
+                <div class="card-content markdown-body" [innerHTML]="getContent(version)"></div>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <footer class="dialog-footer">
+        <button type="button" class="btn-confirm" (click)="acknowledge()">我知道了</button>
+      </footer>
+    </div>
+  </div>
+}
