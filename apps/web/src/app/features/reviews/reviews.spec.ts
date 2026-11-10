@@ -50,6 +50,16 @@ describe('ReviewPageComponent', () => {
     expect(el(fx).textContent).not.toContain('對話');
   });
 
+  it('shows the diff against the previous revision when there is one', async () => {
+    setup({ get: () => Promise.resolve(detail({ revision: 2, diff: { fromRevision: 1, changes: [{ path: 'purpose', before: '查工單', after: '改過的用途' }] } })) });
+    const fx = TestBed.createComponent(ReviewPageComponent);
+    await flush(fx);
+    const row = el(fx).querySelector('table.diff tr')!;
+    expect(row.textContent).toContain('purpose');
+    expect(row.querySelector('.before')!.textContent).toContain('查工單');
+    expect(row.querySelector('.after')!.textContent).toContain('改過的用途');
+  });
+
   it('hides the form once the CIM Engineer has handled it', async () => {
     setup({ get: () => Promise.resolve(detail({ canReply: false })) });
     const fx = TestBed.createComponent(ReviewPageComponent);

@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Ticket, TicketService, errorMessage } from '../../core/tickets/ticket.service';
-import { ChatMessage, InterviewService, SubmissionState, ToolSpec, ToolSpecDraft, WfStep, WorkflowDraft } from '../../core/interview/interview.service';
+import { ChatMessage, Conversation, InterviewService, SubmissionState, ToolSpec, ToolSpecDraft, WfStep, WorkflowDraft } from '../../core/interview/interview.service';
 import { SpecCommentsComponent } from '../reviews/spec-comments.component';
 import { SseMessage } from '../../core/interview/sse';
 
@@ -53,6 +53,25 @@ const MAX_RECONNECT = 5;
       </aside>
 
       <section class="col-mid">
+        @if (reopenReason(); as rr) {
+          <p class="reopen-reason text-sm bg-amber-50 border rounded p-2 mb-2">重開原因：{{ rr }}</p>
+        }
+        @if (previous().length) {
+          <p class="previous text-xs mb-2">
+            舊對話：
+            @for (p of previous(); track p.id) {
+              <button class="old-link underline text-blue-700 mr-2" (click)="viewOld(p.id)">{{ p.createdAt.slice(0, 10) }}{{ p.reopenReason ? '（重開）' : '（首次）' }}</button>
+            }
+          </p>
+        }
+        @if (oldMessages(); as om) {
+          <div class="old-conversation border rounded p-2 mb-2 bg-slate-50">
+            <button class="close-old text-xs underline" (click)="oldMessages.set(null)">關閉舊對話</button>
+            @for (m of om; track $index) {
+              <div class="msg old" [class.user]="m.role === 'user'" [class.assistant]="m.role === 'assistant'">{{ m.text }}</div>
+            }
+          </div>
+        }
         <div class="msgs">
           @for (m of messages(); track $index) {
             <div class="msg" [class.user]="m.role === 'user'" [class.assistant]="m.role === 'assistant'">{{ m.text }}</div>
@@ -236,6 +255,13 @@ export class InterviewPageComponent {
   readonly tabs = TABS;
   readonly ticket = signal<Ticket | null>(null);
   readonly messages = signal<ChatMessage[]>([]);
+  readonly reopenReason = signal<string | null>(null);
+  readonly previous = signal<NonNullable<Conversation['previous']>>([]);
+  readonly oldMessages = signal<ChatMessage[] | null>(null);
+  async viewOld(id: number): Promise<void> {
+    try { this.oldMessages.set((await this.interview.oldConversation(this.id, id)).messages); }
+    catch (e) { this.error.set(errorMessage(e, '無法載入舊對話。')); }
+  }
   readonly running = signal(false);
   readonly error = signal<string | null>(null);
   readonly draft = signal('');
@@ -489,6 +515,8 @@ export class InterviewPageComponent {
       const [t, c] = await Promise.all([this.tickets.get(this.id), this.interview.conversation(this.id)]);
       this.ticket.set(t);
       this.messages.set(c.messages);
+      this.reopenReason.set(c.reopenReason ?? null);
+      this.previous.set(c.previous ?? []);
       await Promise.all([this.loadDraft(), this.loadSpecs(), this.refreshSubmission()]);
       if (this.sub()?.submissions.length && !t.permissions.canChat) this.tab.set(2);
       if (c.running) await this.consume(() => this.interview.reconnect(this.id, null));

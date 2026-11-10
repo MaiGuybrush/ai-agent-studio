@@ -35,6 +35,7 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
         {
             canCancel = responsible && t.Status != TicketStatus.Cancelled,
             canReopen = responsible && t.Status == TicketStatus.Cancelled,
+            canReopenInterview = responsible && t.Status == TicketStatus.Submitted, // 已送出（含已完成）才有東西可重開
             canReassign = me.IsCimEngineer,
             canViewConversation = me.IsCimEngineer,
             canChat = responsible && t.Status == TicketStatus.Interviewing, // 送出後輸入框停用（spec 8.6）

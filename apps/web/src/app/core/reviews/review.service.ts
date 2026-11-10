@@ -41,6 +41,8 @@ export interface ReviewDetail {
   businessUserName: string;
   waitingDays: number;
   history: ReviewHistory[];
+  /** 與同一份 Tool Spec 上一個 revision 的差異（後端算好）；第一版為 null。 */
+  diff?: { fromRevision: number; changes: { path: string; before: unknown; after: unknown }[] } | null;
 }
 
 export interface ReviewReply {

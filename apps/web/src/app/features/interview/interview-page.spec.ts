@@ -9,7 +9,7 @@ const ticket = (canChat: boolean, o: Partial<Ticket> = {}): Ticket => ({
   id: 'T-1', description: '換線通知需求', cimEngineerEmpNo: 'E1', cimEngineerName: '王工',
   businessUserEmpNo: 'B1', businessUserName: '陳業', status: '訪談中', statusCode: 'Interviewing', cancelReason: null,
   createdAt: '2026-01-01T00:00:00Z',
-  permissions: { canCancel: canChat, canReopen: false, canReassign: true, canViewConversation: true, canChat, canSubmit: canChat },
+  permissions: { canCancel: canChat, canReopen: false, canReassign: true, canViewConversation: true, canChat, canSubmit: canChat, canReopenInterview: false },
   ...o,
 });
 
@@ -42,6 +42,7 @@ function setup(opts: { ticket: Ticket; conv?: Conversation }) {
     submit: vi.fn(),
     confirmTerm: vi.fn(() => Promise.resolve({})),
     conversation: vi.fn(() => Promise.resolve(structuredClone(conv.current))),
+    oldConversation: vi.fn(() => Promise.resolve({ messages: [{ role: 'user', text: '舊訊息' }] })),
     send: vi.fn(),
     reconnect: vi.fn(),
     cancel: vi.fn(() => Promise.resolve()),
@@ -92,6 +93,18 @@ describe('InterviewPageComponent', () => {
     expect(bubbles(root)).toEqual(['昨天問的', '昨天答的']);
     expect(Array.from(root.querySelectorAll('.col-right .tab')).map((t) => t.textContent!.trim()))
       .toEqual(['Workflow Definition', 'Tool Spec', '評估進度']);
+  });
+
+  it('shows the reopen reason and lets the user read an old conversation', async () => {
+    const { fx, root, settle } = setup({
+      ticket: ticket(true),
+      conv: { running: false, messages: [], reopenReason: '需求變更', previous: [{ id: 7, reopenReason: null, createdAt: '2026-01-02T00:00:00Z' }] },
+    });
+    fx.detectChanges(); await settle();
+    expect(root.querySelector('.reopen-reason')!.textContent).toContain('需求變更');
+    (root.querySelector('.old-link') as HTMLElement).click();
+    await settle();
+    expect(root.querySelector('.old-conversation')!.textContent).toContain('舊訊息');
   });
 
   it('streams the reply into the chat, locks the input while running, unlocks after done', async () => {
