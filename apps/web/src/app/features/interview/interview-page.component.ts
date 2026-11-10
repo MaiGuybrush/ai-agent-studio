@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Ticket, TicketService, errorMessage } from '../../core/tickets/ticket.service';
-import { ChatMessage, InterviewService, SubmissionState, ToolSpec, ToolSpecDraft, WfStep, WorkflowDraft } from '../../core/interview/interview.service';
+import { ChatMessage, ComplianceReport, InterviewService, SubmissionState, ToolSpec, ToolSpecDraft, WfStep, WorkflowDraft } from '../../core/interview/interview.service';
 import { SpecCommentsComponent } from '../reviews/spec-comments.component';
 import { SseMessage } from '../../core/interview/sse';
 
@@ -203,6 +203,20 @@ const MAX_RECONNECT = 5;
                     @if (r.state === 'Infeasible') { <button class="delete-spec border rounded px-1 text-red-600" (click)="removeSpecResult(r.specId)">刪除</button> }
                     @if (r.state === 'Feasible' || r.state === 'ConditionAccepted') { <button class="mark-implementing border rounded px-1" (click)="act(r.specId, 'implementing')">標為實作中</button> }
                   </div>
+                  @if (r.state === 'Implementing') { <button class="implemented-open border rounded px-1" (click)="openImpl(r.specId)">標為已實作</button> }
+                  @if (implId() === r.specId) {
+                    <div class="flex gap-1 mt-1">
+                      <input class="impl-server border rounded p-1" placeholder="MCP server key" [value]="implServer()" (input)="implServer.set(val($event))" />
+                      <input class="impl-tool border rounded p-1" placeholder="工具名稱" [value]="implTool()" (input)="implTool.set(val($event))" />
+                      <button class="implemented-send border rounded px-2 bg-blue-600 text-white" [disabled]="!implServer().trim() || !implTool().trim()" (click)="sendImpl(r.specId)">檢查並標為已實作</button>
+                    </div>
+                  }
+                  @if (compliance(); as c) {
+                    @if (c.specId === r.specId) {
+                      @if (c.report.failures.length) { <ul class="compliance-failures text-xs text-red-600 list-disc ml-4">@for (m of c.report.failures; track m) { <li>{{ m }}</li> }</ul> }
+                      @if (c.report.warnings.length) { <ul class="compliance-warnings text-xs text-amber-700 list-disc ml-4">@for (m of c.report.warnings; track m) { <li>{{ m }}</li> }</ul> }
+                    }
+                  }
                   @if (reviseId() === r.specId) {
                     <textarea class="revise-purpose w-full border rounded p-1 mt-1" placeholder="修改後的用途說明" [value]="revisePurpose()" (input)="revisePurpose.set(val($event))"></textarea>
                     <button class="revise-send border rounded px-2 bg-blue-600 text-white" [disabled]="!revisePurpose().trim()" (click)="sendRevise(r.specId)">送去重評</button>
@@ -276,6 +290,22 @@ export class InterviewPageComponent {
   readonly reviseId = signal<string | null>(null);
   readonly revisePurpose = signal('');
   readonly actionError = signal<string | null>(null);
+  readonly implId = signal<string | null>(null);
+  readonly implServer = signal('');
+  readonly implTool = signal('');
+  readonly compliance = signal<{ specId: string; report: ComplianceReport } | null>(null);
+  openImpl(specId: string): void {
+    this.implId.set(this.implId() === specId ? null : specId);
+    this.compliance.set(null);
+  }
+  /** 後端比對實際 MCP 工具介面；沒通過時顯示差異報告，狀態不變。 */
+  sendImpl(specId: string): Promise<void> {
+    return this.handle(async () => {
+      const report = await this.interview.markImplemented(this.id, specId, this.implServer().trim(), this.implTool().trim());
+      this.compliance.set({ specId, report });
+      if (report.passed) this.implId.set(null);
+    });
+  }
   openRevise(specId: string): void {
     this.reviseId.set(this.reviseId() === specId ? null : specId);
     this.revisePurpose.set('');

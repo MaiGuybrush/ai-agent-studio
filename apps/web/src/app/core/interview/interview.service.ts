@@ -80,6 +80,8 @@ export interface SubmissionState {
   allInfeasible?: boolean; // 全部 Tool Spec 不可行 → 導向 Cancellation
 }
 
+export interface ComplianceReport { passed: boolean; failures: string[]; warnings: string[] }
+
 @Injectable({ providedIn: 'root' })
 export class InterviewService {
   private readonly http = inject(HttpClient);
@@ -124,6 +126,11 @@ export class InterviewService {
   /** 處理評估結果（#28）：accept-condition／implementing；修改後重評帶 fields；刪除用 DELETE。業務規則在後端。 */
   handleSpec(ticketId: string, specId: string, action: 'accept-condition' | 'implementing' | 'revise', fields?: Record<string, unknown>): Promise<unknown> {
     return firstValueFrom(this.http.post(this.draftUrl(ticketId, `specs/${encodeURIComponent(specId)}/${action}`), fields ? { fields } : {}));
+  }
+
+  /** 標為已實作（#29）：後端做 Interface Compliance Check；沒通過時 passed=false 並附 failures。 */
+  markImplemented(ticketId: string, specId: string, serverKey: string, toolName: string): Promise<ComplianceReport> {
+    return firstValueFrom(this.http.post<ComplianceReport>(this.draftUrl(ticketId, `specs/${encodeURIComponent(specId)}/implemented`), { serverKey, toolName }));
   }
 
   deleteSpec(ticketId: string, specId: string): Promise<unknown> {
