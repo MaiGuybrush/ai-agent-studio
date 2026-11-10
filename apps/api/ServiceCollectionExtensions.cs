@@ -139,6 +139,11 @@ namespace AiAgentStudio.Api
             services.AddSingleton<AiAgentStudio.Api.Vocabulary.IVocabularyAlert, AiAgentStudio.Api.Vocabulary.LogVocabularyAlert>();
             services.AddSingleton<AiAgentStudio.Api.Vocabulary.VocabularyService>();
             services.AddScoped<AiAgentStudio.Api.Vocabulary.ToolSpecNaming>();
+            services.AddHttpClient<AiAgentStudio.Api.Vocabulary.IVocabularyProposalClient, AiAgentStudio.Api.Vocabulary.GiteaVocabularyProposalClient>((sp, c) =>
+            {
+                if (sp.GetRequiredService<AiAgentStudio.Api.Vocabulary.GiteaOptions>().BaseUrl is { Length: > 0 } baseUrl) c.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+                c.Timeout = TimeSpan.FromSeconds(10);
+            });
 
             // UAC 呼叫使用具名 HttpClient，逾時由 Authentication:Uac:TimeoutSeconds 控制（預設 10 秒）
             var uacTimeoutSeconds = configuration.GetValue<int?>("Authentication:Uac:TimeoutSeconds") ?? 10;
