@@ -121,6 +121,7 @@ namespace AiAgentStudio.Api
             services.AddHttpClient("Agent", c => c.Timeout = System.Threading.Timeout.InfiniteTimeSpan); // SSE 長連線
             services.AddSingleton<AiAgentStudio.Api.Interviews.IAgentClient, AiAgentStudio.Api.Interviews.HttpAgentClient>();
             services.AddSingleton<AiAgentStudio.Api.Interviews.InterviewRunner>();
+            services.AddScoped<AiAgentStudio.Api.Workflow.WorkflowDraftService>();
 
             // UAC 呼叫使用具名 HttpClient，逾時由 Authentication:Uac:TimeoutSeconds 控制（預設 10 秒）
             var uacTimeoutSeconds = configuration.GetValue<int?>("Authentication:Uac:TimeoutSeconds") ?? 10;

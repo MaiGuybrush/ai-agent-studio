@@ -93,7 +93,8 @@ public sealed class InterviewRunner(IServiceScopeFactory scopes, IAgentClient ag
             var db = scope.ServiceProvider.GetRequiredService<StudioDb>();
             var iv = await db.Interviews.FirstAsync(x => x.Id == interviewId);
             var messages = JsonNode.Parse(iv.ConversationJson)!.AsArray().Select(m => JsonSerializer.SerializeToElement(m)).ToArray();
-            var req = new AgentRunRequest(run.RunId, messages, iv.OpeningContext, tokens.Issue(run.TicketId, run.EmpNo), cfg["Agent:ToolApiBaseUrl"] ?? "http://127.0.0.1:5080");
+            var (draft, draftDiff) = await scope.ServiceProvider.GetRequiredService<AiAgentStudio.Api.Workflow.WorkflowDraftService>().BeginRunAsync(run.TicketId); // spec 8.4：每回合開始給最新草稿與人工修改 diff
+            var req = new AgentRunRequest(run.RunId, messages, iv.OpeningContext, tokens.Issue(run.TicketId, run.EmpNo), cfg["Agent:ToolApiBaseUrl"] ?? "http://127.0.0.1:5080", draft, draftDiff);
 
             try
             {

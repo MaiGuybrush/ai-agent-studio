@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -14,7 +15,7 @@ namespace AiAgentStudio.Api.Interviews;
 /// <summary>Python /runs 的事件：text／done／error。</summary>
 public sealed record AgentEvent(string Type, JsonElement Data);
 
-public sealed record AgentRunRequest(string RunId, JsonElement[] Messages, string OpeningContext, string RunToken, string ToolApiBaseUrl);
+public sealed record AgentRunRequest(string RunId, JsonElement[] Messages, string OpeningContext, string RunToken, string ToolApiBaseUrl, JsonNode? Draft = null, JsonNode? DraftDiff = null);
 
 /// <summary>C# → Python agent service（spec 2.2、2.3）。測試時換成假的。</summary>
 public interface IAgentClient
@@ -35,7 +36,7 @@ public sealed class HttpAgentClient(IHttpClientFactory http, IConfiguration cfg)
 
     public async IAsyncEnumerable<AgentEvent> RunAsync(AgentRunRequest req, [EnumeratorCancellation] CancellationToken ct)
     {
-        var body = new { run_id = req.RunId, messages = req.Messages, opening_context = req.OpeningContext, run_token = req.RunToken, tool_api_base_url = req.ToolApiBaseUrl };
+        var body = new { run_id = req.RunId, messages = req.Messages, opening_context = req.OpeningContext, run_token = req.RunToken, tool_api_base_url = req.ToolApiBaseUrl, draft = req.Draft, draft_diff = req.DraftDiff };
         using var msg = new HttpRequestMessage(HttpMethod.Post, "/runs") { Content = JsonContent.Create(body) };
         using var res = await Client().SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, ct);
         res.EnsureSuccessStatusCode();

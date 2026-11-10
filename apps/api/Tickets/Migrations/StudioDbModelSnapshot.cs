@@ -173,6 +173,30 @@ namespace AiAgentStudio.Api.Tickets.Migrations
 
                     b.ToTable("ticket_event", (string)null);
                 });
+
+            modelBuilder.Entity("AiAgentStudio.Api.Workflow.WorkflowDraft", b =>
+                {
+                    b.Property<string>("TicketId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DraftJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("HumanEditsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SeenJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("TicketId");
+
+                    b.ToTable("workflow_draft", (string)null);
+                });
 #pragma warning restore 612, 618
         }
     }
