@@ -10,6 +10,7 @@ export interface TicketPermissions {
   canReassign: boolean;
   canViewConversation: boolean;
   canChat: boolean;
+  canSubmit: boolean;
 }
 
 export interface Ticket {

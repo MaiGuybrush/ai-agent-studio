@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { Ticket, TicketService } from '../../core/tickets/ticket.service';
-import { ChatMessage, Conversation, InterviewService, ToolSpecDraft, WorkflowDraft } from '../../core/interview/interview.service';
+import { ChatMessage, Conversation, InterviewService, SubmissionState, ToolSpecDraft, WorkflowDraft } from '../../core/interview/interview.service';
 import { SseMessage } from '../../core/interview/sse';
 import { InterviewPageComponent } from './interview-page.component';
 
@@ -9,7 +9,7 @@ const ticket = (canChat: boolean, o: Partial<Ticket> = {}): Ticket => ({
   id: 'T-1', description: '換線通知需求', cimEngineerEmpNo: 'E1', cimEngineerName: '王工',
   businessUserEmpNo: 'B1', businessUserName: '陳業', status: '訪談中', cancelReason: null,
   createdAt: '2026-01-01T00:00:00Z',
-  permissions: { canCancel: canChat, canReopen: false, canReassign: true, canViewConversation: true, canChat },
+  permissions: { canCancel: canChat, canReopen: false, canReassign: true, canViewConversation: true, canChat, canSubmit: canChat },
   ...o,
 });
 
@@ -35,7 +35,12 @@ function setup(opts: { ticket: Ticket; conv?: Conversation }) {
   const conv = { current: opts.conv ?? { running: false, messages: [] as ChatMessage[] } };
   const draft = { current: { version: 0, steps: [], humanEdits: [] } as WorkflowDraft };
   const specs = { current: { version: 0, steps: [], humanEdits: [], missing: {} } as ToolSpecDraft };
+  const sub = { current: { blockers: [], pendingCount: 0, stage: 1, canSubmit: false, suggestedOwners: [], toolSpecs: [], submissions: [] } as SubmissionState };
+  const tk = { current: opts.ticket };
   const svc = {
+    submissionState: vi.fn(() => Promise.resolve(structuredClone(sub.current))),
+    submit: vi.fn(),
+    confirmTerm: vi.fn(() => Promise.resolve({})),
     conversation: vi.fn(() => Promise.resolve(structuredClone(conv.current))),
     send: vi.fn(),
     reconnect: vi.fn(),
@@ -48,7 +53,7 @@ function setup(opts: { ticket: Ticket; conv?: Conversation }) {
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
-      { provide: TicketService, useValue: { get: () => Promise.resolve(opts.ticket) } },
+      { provide: TicketService, useValue: { get: () => Promise.resolve(tk.current) } },
       { provide: InterviewService, useValue: svc },
       { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: 'T-1' }) } } },
     ],
@@ -64,7 +69,7 @@ function setup(opts: { ticket: Ticket; conv?: Conversation }) {
     (root.querySelector('button.send') as HTMLButtonElement).click();
     await settle();
   };
-  return { fx, root, svc, conv, draft, specs, settle, say };
+  return { fx, root, svc, conv, draft, specs, sub, tk, settle, say };
 }
 const bubbles = (root: HTMLElement) => Array.from(root.querySelectorAll('.msg')).map((m) => m.textContent!.trim());
 
@@ -295,5 +300,114 @@ describe('InterviewPageComponent', () => {
     const saved = svc.saveToolSpecDraft.mock.calls.at(-1)![2][0] as { inputs: { properties: Record<string, { properties?: object }> } };
     expect(Object.keys(saved.inputs.properties)).toEqual(['eqptId', 'detail']); // 順序保留
     expect(Object.keys(saved.inputs.properties['detail'].properties!)).toEqual(['status']);
+  });
+
+  const owner = (system: string, empNo: string, name: string) => ({ system, empNo, name });
+  const blocker = (code: string, message: string) => ({ code, message }) as SubmissionState['blockers'][number];
+  const openSpecTab = async (fx: { detectChanges(): void }, root: HTMLElement, settle: () => Promise<void>) => {
+    fx.detectChanges(); await settle();
+    (root.querySelectorAll('.col-right .tab')[1] as HTMLElement).click();
+    fx.detectChanges(); await settle();
+  };
+  const type = (el: HTMLInputElement, v: string) => { el.value = v; el.dispatchEvent(new Event('input')); };
+  const refresh = async (fx: { componentInstance: unknown; detectChanges(): void }, settle: () => Promise<void>) => {
+    await (fx.componentInstance as { refreshSubmission(): Promise<void> }).refreshSubmission(); fx.detectChanges(); await settle();
+  };
+
+  it('shows pending count at all times but expands the blocker list only from stage 5, submit button only at stage 6', async () => {
+    const { fx, root, sub, settle } = setup({ ticket: ticket(true) });
+    sub.current = { ...sub.current, stage: 3, pendingCount: 2, blockers: [blocker('owner', 'ts1 缺 System Owner'), blocker('new_term', 'x 是新名詞')] };
+    fx.detectChanges(); await settle();
+    expect(root.querySelector('.pending-count')!.textContent).toContain('送出前待處理 2 項');
+    expect(root.querySelector('.blocker-list')).toBeNull();
+    expect(root.querySelector('button.submit-interview')).toBeNull();
+
+    sub.current = { ...sub.current, stage: 5 };
+    await refresh(fx, settle);
+    expect(Array.from(root.querySelectorAll('.blocker-list li')).map((l) => l.textContent!.trim())).toEqual(['ts1 缺 System Owner', 'x 是新名詞']);
+    expect(root.querySelector('button.submit-interview')).toBeNull();
+
+    sub.current = { ...sub.current, stage: 6, pendingCount: 0, blockers: [], canSubmit: true };
+    await refresh(fx, settle);
+    expect(root.querySelector('.blocker-list')).toBeNull();
+    expect((root.querySelector('button.submit-interview') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('submits, disables the input, and switches the right side to evaluation progress', async () => {
+    const { fx, root, svc, sub, tk, settle } = setup({ ticket: ticket(true) });
+    sub.current = { ...sub.current, stage: 6, canSubmit: true };
+    fx.detectChanges(); await settle();
+    svc.submit.mockImplementation(async () => {
+      tk.current = ticket(false, { status: '評估中' });
+      sub.current = { ...sub.current, canSubmit: false, toolSpecs: [{ specId: 'ts1', kind: 'New', state: 'Pending', revision: 1 }, { specId: 'ts2', kind: 'Reuse', state: 'Implemented', revision: 1 }], submissions: [{ number: 1 }] };
+      return { number: 1, status: '評估中' };
+    });
+    (root.querySelector('button.submit-interview') as HTMLButtonElement).click();
+    await settle();
+    expect(svc.submit).toHaveBeenCalledWith('T-1');
+    expect(root.querySelector('textarea[name=message]')).toBeNull();
+    expect(root.querySelector('.col-left')!.textContent).toContain('評估中');
+    const progress = Array.from(root.querySelectorAll('.progress-row')).map((r) => r.textContent!.replace(/\s+/g, ' ').trim());
+    expect(progress[0]).toContain('ts1'); expect(progress[0]).toContain('待評估');
+    expect(progress[1]).toContain('ts2'); expect(progress[1]).toContain('已實作');
+  });
+
+  it('shows the server error when submit is rejected', async () => {
+    const { fx, root, svc, sub, settle } = setup({ ticket: ticket(true) });
+    sub.current = { ...sub.current, stage: 6, canSubmit: true };
+    fx.detectChanges(); await settle();
+    svc.submit.mockRejectedValue({ status: 409, error: { title: '還有未處理的項目，無法送出。' } });
+    (root.querySelector('button.submit-interview') as HTMLButtonElement).click();
+    await settle();
+    expect(root.querySelector('.submit-error')!.textContent).toContain('還有未處理的項目');
+  });
+
+  it('marks the agent-suggested System Owner in the selector and writes the chosen empNo to the draft', async () => {
+    const { fx, root, svc, specs, sub, settle } = setup({ ticket: ticket(true) });
+    sub.current = { ...sub.current, suggestedOwners: [owner('MES', '10000001', '王MES'), owner('ERP', '10000002', '李ERP')] };
+    specs.current = { version: 1, humanEdits: [], missing: {}, steps: [{ id: 'ts1', kind: 'New', system: 'MES' }] };
+    await openSpecTab(fx, root, settle);
+    const sel = root.querySelector('select.owner-select') as HTMLSelectElement;
+    const opts = Array.from(sel.options).map((o) => o.textContent!.trim());
+    expect(opts.find((o) => o.includes('王MES'))).toContain('建議');
+    expect(opts.find((o) => o.includes('李ERP'))).not.toContain('建議');
+    sel.value = '10000002'; sel.dispatchEvent(new Event('change')); fx.detectChanges();
+    svc.saveToolSpecDraft.mockResolvedValue({ ...specs.current, version: 2 });
+    (root.querySelector('.save-specs') as HTMLButtonElement).click(); await settle();
+    expect((svc.saveToolSpecDraft.mock.calls.at(-1)![2][0] as { system_owner: string }).system_owner).toBe('10000002');
+  });
+
+  it('renders pending terms as known and confirms a new term only with an explanation', async () => {
+    const { fx, root, svc, specs, settle } = setup({ ticket: ticket(true) });
+    specs.current = {
+      version: 1, humanEdits: [], missing: {},
+      steps: [{ id: 'ts1', kind: 'New', naming_check: { sha: 's', fields: { 'inputs.lotGrade': { status: 'new' }, 'inputs.waferSize': { status: 'pending' } } } }],
+    };
+    await openSpecTab(fx, root, settle);
+    const rows = Array.from(root.querySelectorAll('.naming-row')).map((r) => r.textContent!.replace(/\s+/g, ' ').trim());
+    expect(rows[1]).toContain('Pending Term');
+    expect(root.querySelectorAll('.confirm-term').length).toBe(1);
+    const btn = root.querySelector('button.confirm-term') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    type(root.querySelector('input.term-explanation') as HTMLInputElement, '   '); fx.detectChanges();
+    expect(btn.disabled).toBe(true);
+    type(root.querySelector('input.term-explanation') as HTMLInputElement, '批號等級'); fx.detectChanges();
+    expect(btn.disabled).toBe(false);
+    btn.click(); await settle();
+    expect(svc.confirmTerm).toHaveBeenCalledWith('T-1', 'lotGrade', '批號等級');
+    expect(svc.toolSpecDraft.mock.calls.length).toBeGreaterThan(1); // 確認後重新載入，狀態變成 pending
+  });
+
+  it('records the reason on the field when a suggested rename is not applied', async () => {
+    const { fx, root, svc, specs, settle } = setup({ ticket: ticket(true) });
+    specs.current = {
+      version: 1, humanEdits: [], missing: {},
+      steps: [{ id: 'ts1', kind: 'New', naming_check: { sha: 's', fields: { 'inputs.equipmentId': { status: 'rename', suggestion: 'eqptId' } } } }],
+    };
+    await openSpecTab(fx, root, settle);
+    type(root.querySelector('input.rename-reason') as HTMLInputElement, '舊系統沿用'); fx.detectChanges();
+    svc.saveToolSpecDraft.mockResolvedValue({ ...specs.current, version: 2 });
+    (root.querySelector('.save-specs') as HTMLButtonElement).click(); await settle();
+    expect((svc.saveToolSpecDraft.mock.calls.at(-1)![2][0] as { naming_reasons: Record<string, string> }).naming_reasons).toEqual({ 'inputs.equipmentId': '舊系統沿用' });
   });
 });
