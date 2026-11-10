@@ -39,7 +39,7 @@ public class SubmissionController(ICurrentUserService user, IdentityService iden
         var recs = await db.ToolSpecRecords.AsNoTracking().Where(x => x.TicketId == ticketId).OrderBy(x => x.SpecId).ToListAsync(ct);
         return Ok(new
         {
-            blockers, pendingCount = blockers.Count,
+            blockers, pendingCount = blockers.Count, stage = await submissions.StageAsync(ticketId, blockers),
             canSubmit = t.Status == TicketStatus.Interviewing && t.CimEngineerEmpNo == me.EmpNo && blockers.Count == 0,
             suggestedOwners = suggested,
             toolSpecs = recs.Select(r => new { specId = r.SpecId, kind = r.Kind, state = r.State, revision = r.CurrentRevision }),

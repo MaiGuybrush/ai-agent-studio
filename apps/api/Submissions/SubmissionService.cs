@@ -53,6 +53,15 @@ public class SubmissionService(StudioDb db, WorkflowDraftService drafts, ToolSpe
         return res;
     }
 
+    /// <summary>目前所在階段（spec 8.2），只供畫面決定要不要展開阻擋清單：沒有步驟 1；有步驟 2；有 Tool Spec 但欄位未補齊 4；只剩阻擋事項 5；可送出 6。</summary>
+    public async Task<int> StageAsync(string ticketId, IReadOnlyCollection<Blocker> blockers)
+    {
+        if ((await drafts.GetAsync(ticketId)).Steps.Count == 0) return 1;
+        if (blockers.Any(b => b.Code == "no_tool_specs")) return 2;
+        if (blockers.Any(b => b.Code == "missing_field")) return 4;
+        return blockers.Count > 0 ? 5 : 6;
+    }
+
     /// <summary>理由記在欄位所屬 spec 的 naming_reasons[欄位路徑]。</summary>
     static string? Reason(JsonObject spec, string path) =>
         spec["naming_reasons"] is JsonObject o && o[path] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;

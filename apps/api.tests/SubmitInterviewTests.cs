@@ -285,4 +285,20 @@ public class SubmitInterviewTests : IDisposable
         Assert.Equal(("10000001", "MES 負責人"), (o["MES"].GetProperty("empNo").GetString(), o["MES"].GetProperty("name").GetString()));
         Assert.Equal("10000002", o["ERP"].GetProperty("empNo").GetString());
     }
+
+    [Fact]
+    public async Task State_reports_the_interview_stage_so_the_ui_can_expand_blockers_only_at_stages_5_and_6()
+    {
+        using var f = await Make();
+        async Task<int> Stage() => (await State(f)).GetProperty("stage").GetInt32();
+        Assert.Equal(1, await Stage());                                                   // 還沒有任何步驟
+        await Agent(f).PutAsJsonAsync("/internal/tools/workflow-steps/s1", new { description = "查工單" });
+        Assert.Equal(2, await Stage());                                                   // 有步驟、還沒有 Tool Spec
+        await Upsert(Agent(f), "ts1", new { kind = "New", purpose = "p", system = "MES" });
+        Assert.Equal(4, await Stage());                                                   // Tool Spec 欄位還沒補齊
+        await Upsert(Agent(f), "ts1", Spec(owner: null));
+        Assert.Equal(5, await Stage());                                                   // 剩 System Owner 等待處理
+        await Upsert(Agent(f), "ts1", new { system_owner = "10000001" });
+        Assert.Equal(6, await Stage());                                                   // 可以送出
+    }
 }
