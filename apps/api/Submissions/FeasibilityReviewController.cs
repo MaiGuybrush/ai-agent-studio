@@ -39,8 +39,6 @@ public class FeasibilityReviewController(ICurrentUserService user, StudioDb db, 
         return errors;
     }
 
-    static string? Owner(string contentJson) => JsonNode.Parse(contentJson)?["system_owner"] is JsonValue v && v.TryGetValue<string>(out var o) ? o.Trim() : null;
-
     /// <summary>目前使用者的待評估清單：State 為 Pending、目前 revision 指派給他的 Tool Spec。</summary>
     [HttpGet("pending")]
     public async Task<IActionResult> Pending(CancellationToken ct)
@@ -52,12 +50,13 @@ public class FeasibilityReviewController(ICurrentUserService user, StudioDb db, 
         var tickets = await db.Tickets.AsNoTracking().Where(t => ticketIds.Contains(t.Id) && t.Status == TicketStatus.Submitted).ToDictionaryAsync(t => t.Id, ct);
         var revs = await db.ToolSpecRevisions.AsNoTracking().Where(r => ticketIds.Contains(r.TicketId)).ToListAsync(ct);
         var subs = await db.Submissions.AsNoTracking().Where(s => ticketIds.Contains(s.TicketId)).ToListAsync(ct);
+        var assigns = await db.ReviewAssignments.AsNoTracking().Where(a => ticketIds.Contains(a.TicketId)).ToListAsync(ct);
         var now = time.GetUtcNow();
         var items = new List<object>();
         foreach (var r in pending.Where(r => tickets.ContainsKey(r.TicketId)))
         {
             var rev = revs.First(x => x.TicketId == r.TicketId && x.SpecId == r.SpecId && x.Revision == r.CurrentRevision);
-            if (Owner(rev.ContentJson) != me) continue;
+            if (SpecOwner.Resolve(rev.ContentJson, rev.Revision, assigns.Where(a => a.TicketId == r.TicketId && a.SpecId == r.SpecId)) != me) continue; // 轉派後舊 owner 不再看到
             var sub = subs.First(s => s.TicketId == r.TicketId && s.Number == rev.SubmissionNumber);
             var t = tickets[r.TicketId];
             items.Add(new
@@ -127,7 +126,8 @@ public class FeasibilityReviewController(ICurrentUserService user, StudioDb db, 
         var rec = await recs.FirstOrDefaultAsync(r => r.TicketId == ticketId && r.SpecId == specId, ct);
         if (rec is null || rec.Kind == "Reuse") return (null, NotFound());
         var rev = await db.ToolSpecRevisions.AsNoTracking().FirstAsync(r => r.TicketId == ticketId && r.SpecId == specId && r.Revision == rec.CurrentRevision, ct);
-        if (user.EmpNo is not { } me || Owner(rev.ContentJson) != me) return (null, Forbid());
+        var assigns = await db.ReviewAssignments.AsNoTracking().Where(a => a.TicketId == ticketId && a.SpecId == specId).ToListAsync(ct);
+        if (user.EmpNo is not { } me || SpecOwner.Resolve(rev.ContentJson, rev.Revision, assigns) != me) return (null, Forbid());
         var t = await db.Tickets.AsNoTracking().FirstAsync(x => x.Id == ticketId, ct);
         return ((t, rec, rev), null);
     }
