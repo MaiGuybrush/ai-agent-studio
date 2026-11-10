@@ -194,10 +194,28 @@ const MAX_RECONNECT = 5;
         } @else {
           <div class="progress mt-2">
             @for (r of sub()?.toolSpecs ?? []; track r.specId) {
-              <div class="progress-row step text-sm">{{ r.specId }}　<b>{{ r.kind }}</b>　rev {{ r.revision }}　<span>{{ stateLabel(r.state) }}</span></div>
+              <div class="progress-row step text-sm">{{ r.specId }}　<b>{{ r.kind }}</b>　rev {{ r.revision }}　<span>{{ stateLabel(r.state) }}</span>
+                @if (r.acceptedCondition) { <div class="text-xs text-slate-600">已接受的條件：{{ r.acceptedCondition }}</div> }
+                @if (sub()?.canHandle) {
+                  <div class="actions flex gap-1 mt-1">
+                    @if (r.state === 'Conditional') { <button class="accept-condition border rounded px-1" (click)="act(r.specId, 'accept-condition')">接受條件</button> }
+                    @if (r.state === 'Conditional' || r.state === 'Infeasible') { <button class="revise-open border rounded px-1" (click)="openRevise(r.specId)">修改後重評</button> }
+                    @if (r.state === 'Infeasible') { <button class="delete-spec border rounded px-1 text-red-600" (click)="removeSpecResult(r.specId)">刪除</button> }
+                    @if (r.state === 'Feasible' || r.state === 'ConditionAccepted') { <button class="mark-implementing border rounded px-1" (click)="act(r.specId, 'implementing')">標為實作中</button> }
+                  </div>
+                  @if (reviseId() === r.specId) {
+                    <textarea class="revise-purpose w-full border rounded p-1 mt-1" placeholder="修改後的用途說明" [value]="revisePurpose()" (input)="revisePurpose.set(val($event))"></textarea>
+                    <button class="revise-send border rounded px-2 bg-blue-600 text-white" [disabled]="!revisePurpose().trim()" (click)="sendRevise(r.specId)">送去重評</button>
+                  }
+                }
+              </div>
             } @empty {
               <p class="text-sm text-slate-500">尚未送出；送出後在此追蹤各 Tool Spec 的評估與實作進度。</p>
             }
+            @if (sub()?.canHandle && sub()?.allInfeasible) {
+              <p class="cancel-hint text-sm text-amber-700 mt-2">所有 Tool Spec 都不可行，請至<a class="underline" [routerLink]="['/tickets', ticket()?.id]">需求單頁面</a>執行 Cancellation（取消需求單）。</p>
+            }
+            @if (actionError(); as ae) { <p class="action-error text-sm text-red-600">{{ ae }}</p> }
           </div>
         }
       </aside>
@@ -254,6 +272,34 @@ export class InterviewPageComponent {
   }
   stateLabel(state: string): string {
     return STATE_LABELS[state] ?? state;
+  }
+  readonly reviseId = signal<string | null>(null);
+  readonly revisePurpose = signal('');
+  readonly actionError = signal<string | null>(null);
+  openRevise(specId: string): void {
+    this.reviseId.set(this.reviseId() === specId ? null : specId);
+    this.revisePurpose.set('');
+  }
+  /** 處理評估結果（業務規則在後端；失敗訊息直接顯示）。 */
+  private async handle(run: () => Promise<unknown>): Promise<void> {
+    this.actionError.set(null);
+    try {
+      await run();
+      this.reviseId.set(null);
+      this.ticket.set(await this.tickets.get(this.id));
+    } catch (e) {
+      this.actionError.set(errorMessage(e, '處理失敗。'));
+    }
+    await this.refreshSubmission();
+  }
+  act(specId: string, action: 'accept-condition' | 'implementing'): Promise<void> {
+    return this.handle(() => this.interview.handleSpec(this.id, specId, action));
+  }
+  sendRevise(specId: string): Promise<void> {
+    return this.handle(async () => { await this.interview.handleSpec(this.id, specId, 'revise', { purpose: this.revisePurpose().trim() }); await this.loadSpecs(); });
+  }
+  removeSpecResult(specId: string): Promise<void> {
+    return this.handle(async () => { await this.interview.deleteSpec(this.id, specId); await Promise.all([this.loadDraft(), this.loadSpecs()]); });
   }
   async refreshSubmission(): Promise<void> {
     try { this.sub.set(await this.interview.submissionState(this.id)); } catch { /* 載入失敗不影響對話 */ }

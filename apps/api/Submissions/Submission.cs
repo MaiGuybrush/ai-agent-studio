@@ -63,6 +63,8 @@ public class ToolSpecRecord
     public int CurrentRevision { get; set; }
     /// <summary>CIM Engineer 已處理評估結果（接受條件、修改或刪除；#28 負責寫入）。為 true 後 System Owner 不能再修改回覆（spec 9）。</summary>
     public bool Handled { get; set; }
+    /// <summary>CIM Engineer 接受的條件（spec 6.2 選填「已接受的條件」）；新 revision 時清除。</summary>
+    public string? AcceptedCondition { get; set; }
 }
 
 /// <summary>feasibility_review（spec 13）：綁定 revision 的回覆；每次回覆或修改新增一筆，保留歷史。</summary>

@@ -188,6 +188,36 @@ public class WorkflowDraftService(StudioDb db, TimeProvider time)
         return (draft, diff);
     }
 
+    /// <summary>
+    /// 送出後 CIM Engineer 處理評估結果（#28）時，讓草稿跟上已凍結的內容：整份取代某個 Tool Spec（content 為 null 則刪除，
+    /// 並解除 Workflow Definition 中引用它的步驟，變成人工步驟）。不標記人工修改、不存檔——由呼叫端與自己的變更同一次 SaveChanges。
+    /// </summary>
+    public async Task SyncSpecAsync(string ticketId, string specId, JsonObject? content)
+    {
+        var specs = await Load(ticketId, WorkflowDraft.ToolSpecsDoc);
+        var steps = await Load(ticketId, WorkflowDraft.StepsDoc);
+        foreach (var (d, coll) in new[] { (specs, WorkflowDraft.ToolSpecsDoc), (steps, WorkflowDraft.StepsDoc) })
+        {
+            var cur = Parse(d.DraftJson); var seen = Parse(d.SeenJson);
+            var before = d.DraftJson;
+            foreach (var doc in new[] { cur, seen })
+            {
+                var items = Items(doc, coll);
+                if (coll == WorkflowDraft.ToolSpecsDoc)
+                {
+                    var i = items.ToList().FindIndex(s => s?["id"]?.GetValue<string>() == specId);
+                    JsonObject? n = null;
+                    if (content is not null) { n = (JsonObject)content.DeepClone(); n["id"] = specId; n.Remove("system_owner_name"); }
+                    if (i >= 0) items.RemoveAt(i);
+                    if (n is not null) { if (i >= 0) items.Insert(i, n); else items.Add(n); }
+                }
+                else foreach (var s in items.OfType<JsonObject>().Where(s => s["tool_spec"]?.GetValue<string>() == specId)) s.Remove("tool_spec");
+            }
+            if (cur.ToJsonString(J) == before) continue; // 沒變就不遞增版本
+            d.DraftJson = cur.ToJsonString(J); d.SeenJson = seen.ToJsonString(J); d.Version++;
+        }
+    }
+
     /// <summary>Interview 送出時呼叫：清除人工修改標記（steps 與 tool_specs 都清）。</summary>
     public async Task ClearHumanEditsAsync(string ticketId)
     {

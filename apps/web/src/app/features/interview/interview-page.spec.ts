@@ -49,6 +49,8 @@ function setup(opts: { ticket: Ticket; conv?: Conversation }) {
     saveWorkflowDraft: vi.fn(),
     toolSpecDraft: vi.fn(() => Promise.resolve(structuredClone(specs.current))),
     saveToolSpecDraft: vi.fn(),
+    handleSpec: vi.fn(() => Promise.resolve({})),
+    deleteSpec: vi.fn(() => Promise.resolve({})),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -409,5 +411,53 @@ describe('InterviewPageComponent', () => {
     svc.saveToolSpecDraft.mockResolvedValue({ ...specs.current, version: 2 });
     (root.querySelector('.save-specs') as HTMLButtonElement).click(); await settle();
     expect((svc.saveToolSpecDraft.mock.calls.at(-1)![2][0] as { naming_reasons: Record<string, string> }).naming_reasons).toEqual({ 'inputs.equipmentId': '舊系統沿用' });
+  });
+
+  describe('handling evaluation results (#28)', () => {
+    const specs = [
+      { specId: 'ts1', kind: 'New', state: 'Conditional', revision: 1 },
+      { specId: 'ts2', kind: 'New', state: 'Infeasible', revision: 1 },
+      { specId: 'ts3', kind: 'New', state: 'Feasible', revision: 1 },
+    ];
+    const handled = async (o: Partial<SubmissionState>) => {
+      const r = setup({ ticket: ticket(false, { status: '評估中' }) });
+      r.sub.current = { ...r.sub.current, stage: 6, toolSpecs: specs, submissions: [{ number: 1 }], canHandle: true, ...o };
+      r.fx.detectChanges(); await r.settle();
+      return r;
+    };
+    const row = (root: HTMLElement, id: string) => Array.from(root.querySelectorAll('.progress-row')).find((r) => r.textContent!.includes(id)) as HTMLElement;
+
+    it('shows per-state actions to the responsible engineer and calls the API', async () => {
+      const { root, svc, settle } = await handled({});
+      expect(row(root, 'ts1').querySelector('.accept-condition')).not.toBeNull();
+      expect(row(root, 'ts1').querySelector('.delete-spec')).toBeNull();
+      expect(row(root, 'ts2').querySelector('.delete-spec')).not.toBeNull();
+      expect(row(root, 'ts3').querySelector('.mark-implementing')).not.toBeNull();
+      (row(root, 'ts1').querySelector('.accept-condition') as HTMLButtonElement).click(); await settle();
+      expect(svc.handleSpec).toHaveBeenCalledWith('T-1', 'ts1', 'accept-condition');
+      (row(root, 'ts3').querySelector('.mark-implementing') as HTMLButtonElement).click(); await settle();
+      expect(svc.handleSpec).toHaveBeenCalledWith('T-1', 'ts3', 'implementing');
+      (row(root, 'ts2').querySelector('.delete-spec') as HTMLButtonElement).click(); await settle();
+      expect(svc.deleteSpec).toHaveBeenCalledWith('T-1', 'ts2');
+    });
+
+    it('sends the edited purpose for re-review', async () => {
+      const { fx, root, svc, settle } = await handled({});
+      (row(root, 'ts2').querySelector('.revise-open') as HTMLButtonElement).click(); fx.detectChanges();
+      const ta = row(root, 'ts2').querySelector('textarea.revise-purpose') as HTMLTextAreaElement;
+      ta.value = '新的用途'; ta.dispatchEvent(new Event('input')); fx.detectChanges();
+      (row(root, 'ts2').querySelector('.revise-send') as HTMLButtonElement).click(); await settle();
+      expect(svc.handleSpec).toHaveBeenCalledWith('T-1', 'ts2', 'revise', { purpose: '新的用途' });
+    });
+
+    it('hides actions for anyone but the responsible engineer', async () => {
+      const a = await handled({ canHandle: false });
+      expect(a.root.querySelector('.accept-condition, .delete-spec, .mark-implementing')).toBeNull();
+    });
+
+    it('points to Cancellation when all specs are infeasible', async () => {
+      const b = await handled({ allInfeasible: true, toolSpecs: specs.map((s) => ({ ...s, state: 'Infeasible' })) });
+      expect(b.root.querySelector('.cancel-hint')!.textContent).toContain('Cancellation');
+    });
   });
 });

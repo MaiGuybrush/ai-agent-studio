@@ -302,6 +302,9 @@ namespace AiAgentStudio.Api.Tickets.Migrations
                     b.Property<string>("SpecId")
                         .HasColumnType("text");
 
+                    b.Property<string>("AcceptedCondition")
+                        .HasColumnType("text");
+
                     b.Property<int>("CurrentRevision")
                         .HasColumnType("integer");
 
