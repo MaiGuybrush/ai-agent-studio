@@ -24,10 +24,12 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
         return await identity.GetAsync(empNo, jwt, ct);
     }
 
+    static bool IsResponsible(RequirementTicket t, UserIdentity me) => me.IsCimEngineer && t.CimEngineerEmpNo == me.EmpNo;
+
     /// <summary>權限規則集中在這裡（spec 3.3）。負責人調離 CIM 後 IsCimEngineer 為 false，自然變唯讀。</summary>
     static object PermissionsOf(RequirementTicket t, UserIdentity me)
     {
-        var responsible = me.IsCimEngineer && t.CimEngineerEmpNo == me.EmpNo;
+        var responsible = IsResponsible(t, me);
         return new
         {
             canCancel = responsible && t.Status != TicketStatus.Cancelled,
@@ -75,6 +77,47 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
         if (await WhoAsync(ct) is not { } me) return Forbid();
         var all = await db.Tickets.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
         return Ok(all.Select(t => View(t, me)));
+    }
+
+    void Log(RequirementTicket t, string type, UserIdentity me, string? from, string? to, string? reason) =>
+        db.TicketEvents.Add(new TicketEvent { TicketId = t.Id, Type = type, ActorEmpNo = me.EmpNo, At = time.GetUtcNow(), FromValue = from, ToValue = to, Reason = reason });
+
+    public record CancelRequest(string? Reason);
+
+    /// <summary>取消（spec 5.3-9）：只有負責的 CIM Engineer，須附原因。</summary>
+    [HttpPost("{id}/cancel")]
+    public async Task<IActionResult> Cancel(string id, CancelRequest req, CancellationToken ct)
+    {
+        if (await WhoAsync(ct) is not { } me) return Forbid();
+        var t = await db.Tickets.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t is null) return NotFound();
+        if (!IsResponsible(t, me)) return Forbid();
+        if (string.IsNullOrWhiteSpace(req.Reason)) return Problem("取消須附原因。", statusCode: 400);
+        if (t.Status == TicketStatus.Cancelled) return Problem("需求單已是取消狀態。", statusCode: 409);
+        Log(t, "Cancel", me, t.Status, TicketStatus.Cancelled, req.Reason.Trim());
+        t.StatusBeforeCancel = t.Status;
+        t.Status = TicketStatus.Cancelled;
+        t.CancelReason = req.Reason.Trim();
+        await db.SaveChangesAsync(ct);
+        return Ok(View(t, me));
+    }
+
+    /// <summary>重開：回到取消前的狀態。</summary>
+    [HttpPost("{id}/reopen")]
+    public async Task<IActionResult> Reopen(string id, CancellationToken ct)
+    {
+        if (await WhoAsync(ct) is not { } me) return Forbid();
+        var t = await db.Tickets.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t is null) return NotFound();
+        if (!IsResponsible(t, me)) return Forbid();
+        if (t.Status != TicketStatus.Cancelled) return Problem("需求單不是取消狀態。", statusCode: 409);
+        var back = t.StatusBeforeCancel ?? TicketStatus.Interviewing;
+        Log(t, "Reopen", me, t.Status, back, null);
+        t.Status = back;
+        t.StatusBeforeCancel = null;
+        t.CancelReason = null;
+        await db.SaveChangesAsync(ct);
+        return Ok(View(t, me));
     }
 
     [HttpGet("{id}")]
