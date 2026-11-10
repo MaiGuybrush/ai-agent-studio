@@ -14,6 +14,21 @@ export interface Conversation {
   messages: ChatMessage[];
 }
 
+export interface WfStep {
+  id: string;
+  description?: string;
+  tool_spec?: string | null; // null／未填 = 人工步驟
+  inputs?: unknown[];
+  outputs?: string[];
+  needs_approval?: boolean;
+  condition?: string;
+}
+export interface WorkflowDraft {
+  version: number;
+  steps: WfStep[];
+  humanEdits: string[]; // 人工修改過的欄位路徑，例如 steps.s1.description
+}
+
 @Injectable({ providedIn: 'root' })
 export class InterviewService {
   private readonly http = inject(HttpClient);
@@ -27,6 +42,20 @@ export class InterviewService {
 
   conversation(ticketId: string): Promise<Conversation> {
     return firstValueFrom(this.http.get<Conversation>(this.url(ticketId)));
+  }
+
+  workflowDraft(ticketId: string): Promise<WorkflowDraft> {
+    return firstValueFrom(this.http.get<WorkflowDraft>(this.draftUrl(ticketId)));
+  }
+
+  /** 存檔帶版本號；版本過期時後端回 409。 */
+  saveWorkflowDraft(ticketId: string, version: number, steps: WfStep[]): Promise<WorkflowDraft> {
+    return firstValueFrom(this.http.put<WorkflowDraft>(this.draftUrl(ticketId), { version, steps }));
+  }
+
+  private draftUrl(ticketId: string): string {
+    const base = this.config.normalizeUrl(String(this.config.config()['apiBaseUrl'] ?? ''));
+    return `${base}/api/tickets/${encodeURIComponent(ticketId)}/workflow-draft`;
   }
 
   cancel(ticketId: string): Promise<unknown> {

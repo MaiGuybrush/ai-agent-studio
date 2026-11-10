@@ -105,7 +105,7 @@ def test_agent_gets_three_readonly_tools_that_forward_to_csharp_with_run_token()
         seen.append((str(req.url), req.headers.get("x-run-token")))
         return httpx.Response(200, json={"path": req.url.path})
 
-    c = TestClient(create_app(model=TestModel(custom_output_text="好"), api_key="k", tool_transport=httpx.MockTransport(handler)))
+    c = TestClient(create_app(model=TestModel(custom_output_text="好", call_tools=["list_mcp_tools", "list_systems", "get_requirement_ticket"]), api_key="k", tool_transport=httpx.MockTransport(handler)))  # #20 起還有草稿工具，這裡只驗唯讀三個
     with c.stream("POST", "/runs", json=body(), headers=KEY) as r:
         evs = events(r)
     assert evs[-1][0] == "done", evs[-1]

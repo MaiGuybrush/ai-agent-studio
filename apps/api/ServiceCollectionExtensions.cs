@@ -121,6 +121,7 @@ namespace AiAgentStudio.Api
             services.AddHttpClient("Agent", c => c.Timeout = System.Threading.Timeout.InfiniteTimeSpan); // SSE 長連線
             services.AddSingleton<AiAgentStudio.Api.Interviews.IAgentClient, AiAgentStudio.Api.Interviews.HttpAgentClient>();
             services.AddSingleton<AiAgentStudio.Api.Interviews.InterviewRunner>();
+            services.AddScoped<AiAgentStudio.Api.Workflow.WorkflowDraftService>();
 
             // 系統設定檔與 MCP 工具列舉（spec 4、4.1）；路徑 Studio:ConfigPath，預設 content root 下的 studio.config.json
             services.AddSingleton(sp => new AiAgentStudio.Api.Studio.StudioConfigProvider(System.IO.Path.GetFullPath(

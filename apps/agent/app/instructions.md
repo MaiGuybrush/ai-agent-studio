@@ -11,4 +11,6 @@ grill 流程（可以回到前面的階段）：
 
 一次只問一個問題。你不能呼叫任何業務 MCP 工具。
 
+Workflow Definition 草稿：用 upsert_workflow_step／delete_workflow_step 逐步建立（線性步驟，分支用 condition 文字）。每回合開頭會附上最新草稿與 CIM Engineer 的人工修改，人工修改優先：工具回傳拒絕時，把目前的值告訴 CIM Engineer 並詢問；他同意後才帶 override_human_edit=true 重寫。
+
 你可用的工具只有唯讀的三個：list_mcp_tools（現有 MCP 工具）、list_systems（系統與 System Owner）、get_requirement_ticket（這張需求單）。CIM Engineer 問「現有有哪些工具」時請呼叫 list_mcp_tools 再整理回答。

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { Ticket, TicketService } from '../../core/tickets/ticket.service';
-import { ChatMessage, Conversation, InterviewService } from '../../core/interview/interview.service';
+import { ChatMessage, Conversation, InterviewService, WorkflowDraft } from '../../core/interview/interview.service';
 import { SseMessage } from '../../core/interview/sse';
 import { InterviewPageComponent } from './interview-page.component';
 
@@ -33,11 +33,14 @@ const text = (id: number, t: string): SseMessage => ({ id: String(id), type: 'te
 
 function setup(opts: { ticket: Ticket; conv?: Conversation }) {
   const conv = { current: opts.conv ?? { running: false, messages: [] as ChatMessage[] } };
+  const draft = { current: { version: 0, steps: [], humanEdits: [] } as WorkflowDraft };
   const svc = {
     conversation: vi.fn(() => Promise.resolve(structuredClone(conv.current))),
     send: vi.fn(),
     reconnect: vi.fn(),
     cancel: vi.fn(() => Promise.resolve()),
+    workflowDraft: vi.fn(() => Promise.resolve(structuredClone(draft.current))),
+    saveWorkflowDraft: vi.fn(),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -58,7 +61,7 @@ function setup(opts: { ticket: Ticket; conv?: Conversation }) {
     (root.querySelector('button.send') as HTMLButtonElement).click();
     await settle();
   };
-  return { fx, root, svc, conv, settle, say };
+  return { fx, root, svc, conv, draft, settle, say };
 }
 const bubbles = (root: HTMLElement) => Array.from(root.querySelectorAll('.msg')).map((m) => m.textContent!.trim());
 
@@ -172,6 +175,47 @@ describe('InterviewPageComponent', () => {
     await settle();
     expect(svc.cancel).toHaveBeenCalledWith('T-1');
     s.push('end'); await settle();
+  });
+
+  it('draft_changed refreshes the Workflow Definition tab live and marks human-edited fields', async () => {
+    const { fx, root, svc, draft, settle, say } = setup({ ticket: ticket(true) });
+    fx.detectChanges(); await settle();
+    expect(root.querySelectorAll('.step').length).toBe(0);
+    const s = controlled();
+    svc.send.mockReturnValue(s.iterable);
+    await say('開始');
+
+    draft.current = { version: 2, steps: [{ id: 's1', description: '收單' }, { id: 's2', description: '查詢' }], humanEdits: ['steps.s2.description'] };
+    s.push({ id: '1', type: 'draft_changed', data: { version: 2 } });
+    await settle();
+    expect(Array.from(root.querySelectorAll('.step .f-description')).map((t) => (t as HTMLTextAreaElement).value)).toEqual(['收單', '查詢']);
+    const marked = Array.from(root.querySelectorAll('.step')).map((st) => !!st.querySelector('.badge'));
+    expect(marked).toEqual([false, true]); // 只標示人工修改過的欄位
+    s.push('end'); await settle();
+  });
+
+  it('saves engineer edits with the version number and reloads with a message on conflict', async () => {
+    const { fx, root, svc, draft, settle } = setup({ ticket: ticket(true) });
+    draft.current = { version: 3, steps: [{ id: 's1', description: 'A' }], humanEdits: [] };
+    fx.detectChanges(); await settle();
+    const edit = (v: string) => {
+      const t = root.querySelector('.f-description') as HTMLTextAreaElement;
+      t.value = v; t.dispatchEvent(new Event('input')); fx.detectChanges();
+    };
+    const save = async () => { (root.querySelector('button.save') as HTMLButtonElement).click(); await settle(); };
+
+    edit('B');
+    svc.saveWorkflowDraft.mockResolvedValue({ version: 4, steps: [{ id: 's1', description: 'B' }], humanEdits: ['steps.s1.description'] });
+    await save();
+    expect(svc.saveWorkflowDraft).toHaveBeenCalledWith('T-1', 3, [{ id: 's1', description: 'B' }]);
+    expect(root.querySelector('.step .badge')).not.toBeNull();
+
+    edit('C');
+    draft.current = { version: 5, steps: [{ id: 's1', description: 'agent 剛改' }], humanEdits: [] };
+    svc.saveWorkflowDraft.mockRejectedValue({ status: 409 });
+    await save();
+    expect(root.querySelector('.draft-error')!.textContent).toContain('已被更新');
+    expect((root.querySelector('.f-description') as HTMLTextAreaElement).value).toBe('agent 剛改');
   });
 
   it('read-only for a non-responsible CIM Engineer: sees history, no input', async () => {
