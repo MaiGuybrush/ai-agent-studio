@@ -25,7 +25,7 @@ cd apps/agent && python -m venv .venv && .venv/Scripts/python -m pip install -r 
 
 ## PostgreSQL（本機以 podman；只有 C# 連線）
 
-#15 本身不使用 DB；之後的 ticket 才會連。啟動：
+#16 起 API 使用 DB（需求單、`ticket_event`；EF Core migrations 在 `apps/api/Tickets/Migrations`，API 啟動時自動套用）。啟動（已建立過則 `podman start aas-pg`）：
 
 ```
 podman run -d --name aas-pg -p 127.0.0.1:5432:5432 \
@@ -40,7 +40,9 @@ podman run -d --name aas-pg -p 127.0.0.1:5432:5432 \
 ## 測試
 
 ```
-dotnet test apps/api.tests                              # 身分／權限判定（無 DB）
+dotnet test apps/api.tests                              # 身分／權限／需求單（EF InMemory，不需 DB）
+# 連真 PostgreSQL 一併驗證 migrations：AAS_PG="Host=localhost;Port=5432;Database=studio;Username=studio;Password=studio" dotnet test apps/api.tests
+# 新增 migration：dotnet tool restore && dotnet ef migrations add <Name> --project apps/api --output-dir Tickets/Migrations
 node --test tools/mock-uac.test.mjs                     # mock UAC
 cd apps/web && pnpm exec ng test --watch=false          # 前端
 cd apps/agent && .venv/Scripts/python -m pytest -q      # agent /health

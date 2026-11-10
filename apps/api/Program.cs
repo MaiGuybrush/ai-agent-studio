@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.InteropServices;
 using AiAgentStudio.Api;
 using Microsoft.AspNetCore.Builder;
@@ -26,6 +28,13 @@ builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 var app = builder.Build();
+
+// 啟動時套用 EF migrations（Testing 環境用 InMemory，略過）
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    using var scope = app.Services.CreateScope();
+    scope.ServiceProvider.GetRequiredService<AiAgentStudio.Api.Tickets.StudioDb>().Database.Migrate();
+}
 
 // Swagger 配置
 app.UseSwagger(c =>
