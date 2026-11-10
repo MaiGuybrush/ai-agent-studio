@@ -42,6 +42,7 @@ public class SubmissionController(ICurrentUserService user, IdentityService iden
             blockers, pendingCount = blockers.Count, stage = await submissions.StageAsync(ticketId, blockers),
             canSubmit = t.Status == TicketStatus.Interviewing && t.CimEngineerEmpNo == me.EmpNo && blockers.Count == 0,
             suggestedOwners = suggested,
+            canHandle = t.Status == TicketStatus.Submitted && t.CimEngineerEmpNo == me.EmpNo, // 可處理評估結果（#28）
             toolSpecs = recs.Select(r => new { specId = r.SpecId, kind = r.Kind, state = r.State, revision = r.CurrentRevision, handled = r.Handled, acceptedCondition = r.AcceptedCondition }),
             allInfeasible = recs.Count > 0 && recs.All(r => r.State == ToolSpecState.Infeasible), // 全部不可行 → 畫面導向 Cancellation
             submissions = subs.Select(s => new

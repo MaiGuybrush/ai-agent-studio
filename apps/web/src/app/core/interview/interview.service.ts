@@ -74,8 +74,10 @@ export interface SubmissionState {
   stage: number; // 1..6，第 5、6 階段才展開完整阻擋清單
   canSubmit: boolean;
   suggestedOwners: { system: string; empNo: string; name: string | null }[]; // 系統對照表的建議
-  toolSpecs: { specId: string; kind: string; state: string; revision: number }[]; // 已送出的 Tool Spec 目前狀態
+  toolSpecs: { specId: string; kind: string; state: string; revision: number; handled?: boolean; acceptedCondition?: string | null }[]; // 已送出的 Tool Spec 目前狀態
   submissions: { number: number }[];
+  canHandle?: boolean; // 負責的 CIM Engineer 可處理評估結果（後端算好）
+  allInfeasible?: boolean; // 全部 Tool Spec 不可行 → 導向 Cancellation
 }
 
 @Injectable({ providedIn: 'root' })
@@ -117,6 +119,15 @@ export class InterviewService {
   /** 送出 Interview；有阻擋事項時後端回 409。 */
   submit(ticketId: string): Promise<{ number: number; status: string }> {
     return firstValueFrom(this.http.post<{ number: number; status: string }>(this.draftUrl(ticketId, 'submit'), {}));
+  }
+
+  /** 處理評估結果（#28）：accept-condition／implementing；修改後重評帶 fields；刪除用 DELETE。業務規則在後端。 */
+  handleSpec(ticketId: string, specId: string, action: 'accept-condition' | 'implementing' | 'revise', fields?: Record<string, unknown>): Promise<unknown> {
+    return firstValueFrom(this.http.post(this.draftUrl(ticketId, `specs/${encodeURIComponent(specId)}/${action}`), fields ? { fields } : {}));
+  }
+
+  deleteSpec(ticketId: string, specId: string): Promise<unknown> {
+    return firstValueFrom(this.http.delete(this.draftUrl(ticketId, `specs/${encodeURIComponent(specId)}`)));
   }
 
   /** 確認新名詞（只有負責的 CIM Engineer；說明必填）→ 成為 Pending Term。 */
