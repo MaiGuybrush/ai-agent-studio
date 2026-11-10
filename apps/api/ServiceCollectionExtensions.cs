@@ -115,6 +115,13 @@ namespace AiAgentStudio.Api
             services.AddDbContext<AiAgentStudio.Api.Tickets.StudioDb>(o =>
                 o.UseNpgsql(configuration.GetConnectionString("Studio")));
 
+            // Interview：C# ⇄ Python agent service（spec 2.2、2.3）。RunTokenSecret 未設定時每次啟動隨機產生（重啟後舊 token 全失效，符合短期 token）。
+            services.AddSingleton(sp => new AiAgentStudio.Api.Interviews.RunTokenService(sp.GetRequiredService<TimeProvider>(),
+                configuration["Agent:RunTokenSecret"] is { Length: > 0 } sec ? sec : Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))));
+            services.AddHttpClient("Agent", c => c.Timeout = System.Threading.Timeout.InfiniteTimeSpan); // SSE 長連線
+            services.AddSingleton<AiAgentStudio.Api.Interviews.IAgentClient, AiAgentStudio.Api.Interviews.HttpAgentClient>();
+            services.AddSingleton<AiAgentStudio.Api.Interviews.InterviewRunner>();
+
             // UAC 呼叫使用具名 HttpClient，逾時由 Authentication:Uac:TimeoutSeconds 控制（預設 10 秒）
             var uacTimeoutSeconds = configuration.GetValue<int?>("Authentication:Uac:TimeoutSeconds") ?? 10;
             if (uacTimeoutSeconds <= 0)

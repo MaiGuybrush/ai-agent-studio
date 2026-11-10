@@ -44,8 +44,22 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
     public DbSet<RequirementTicket> Tickets => Set<RequirementTicket>();
     public DbSet<TicketEvent> TicketEvents => Set<TicketEvent>();
 
+    public DbSet<AiAgentStudio.Api.Interviews.Interview> Interviews => Set<AiAgentStudio.Api.Interviews.Interview>();
+    public DbSet<AiAgentStudio.Api.Interviews.AgentRun> AgentRuns => Set<AiAgentStudio.Api.Interviews.AgentRun>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<AiAgentStudio.Api.Interviews.Interview>(e =>
+        {
+            e.ToTable("interview");
+            e.HasIndex(x => x.TicketId);
+            e.Property(x => x.ConversationJson).HasColumnType("jsonb");
+        });
+        b.Entity<AiAgentStudio.Api.Interviews.AgentRun>(e =>
+        {
+            e.ToTable("agent_run");
+            e.HasIndex(x => x.TicketId);
+        });
         b.Entity<RequirementTicket>(e =>
         {
             e.ToTable("requirement_ticket");
