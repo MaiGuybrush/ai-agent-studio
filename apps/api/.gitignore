@@ -33,3 +33,6 @@ packages/
 .vscode/
 .scratch/
 
+
+# 本機 email sender 輸出
+outbox-mail/

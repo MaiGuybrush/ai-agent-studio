@@ -141,6 +141,18 @@ namespace AiAgentStudio.Api
             services.AddScoped<AiAgentStudio.Api.Vocabulary.ToolSpecNaming>();
             services.AddScoped<AiAgentStudio.Api.Vocabulary.PendingTermService>();
             services.AddScoped<AiAgentStudio.Api.Submissions.SubmissionService>();
+
+            // Email outbox（spec 10）：Email:Sender = LocalFolder（預設，開發）或 InternalApi
+            services.Configure<AiAgentStudio.Api.Notifications.EmailOptions>(configuration.GetSection("Email"));
+            services.AddHttpClient<AiAgentStudio.Api.Notifications.InternalApiEmailSender>((sp, c) =>
+                c.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiAgentStudio.Api.Notifications.EmailOptions>>().Value.InternalApi.TimeoutSeconds));
+            services.AddSingleton<AiAgentStudio.Api.Notifications.LocalFolderEmailSender>();
+            services.AddSingleton<AiAgentStudio.Api.Notifications.IEmailSender>(sp =>
+                sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiAgentStudio.Api.Notifications.EmailOptions>>().Value.Sender.Equals("InternalApi", StringComparison.OrdinalIgnoreCase)
+                    ? sp.GetRequiredService<AiAgentStudio.Api.Notifications.InternalApiEmailSender>()
+                    : sp.GetRequiredService<AiAgentStudio.Api.Notifications.LocalFolderEmailSender>());
+            services.AddScoped<AiAgentStudio.Api.Notifications.EmailOutboxDispatcher>();
+            services.AddHostedService<AiAgentStudio.Api.Notifications.EmailOutboxWorker>();
             services.AddHttpClient<AiAgentStudio.Api.Vocabulary.IVocabularyProposalClient, AiAgentStudio.Api.Vocabulary.GiteaVocabularyProposalClient>((sp, c) =>
             {
                 if (sp.GetRequiredService<AiAgentStudio.Api.Vocabulary.GiteaOptions>().BaseUrl is { Length: > 0 } baseUrl) c.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");

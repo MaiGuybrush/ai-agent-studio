@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+using AiAgentStudio.Api.Notifications;
 using AiAgentStudio.Api.Studio;
 using AiAgentStudio.Api.Tickets;
 using AiAgentStudio.Api.Vocabulary;
@@ -82,6 +83,7 @@ public class SubmissionService(StudioDb db, WorkflowDraftService drafts, ToolSpe
         var records = await db.ToolSpecRecords.Where(x => x.TicketId == t.Id).ToListAsync(ct);
         var revisions = await db.ToolSpecRevisions.Where(x => x.TicketId == t.Id).ToListAsync(ct);
         foreach (var gone in records.Where(r => !specs.Any(s => s["id"]!.GetValue<string>() == r.SpecId))) db.ToolSpecRecords.Remove(gone); // 草稿已刪除的 spec
+        var toEvaluate = new Dictionary<string, List<string>>(); // System Owner 工號 → 這次新產生 revision、需要他評估的 Tool Spec
         foreach (var s in specs)
         {
             var id = s["id"]!.GetValue<string>();
@@ -98,7 +100,12 @@ public class SubmissionService(StudioDb db, WorkflowDraftService drafts, ToolSpe
             rec.CurrentRevision = (rec.CurrentRevision) + 1;
             rec.State = kind == "Reuse" ? ToolSpecState.Implemented : ToolSpecState.Pending; // Reuse 不需要 Feasibility Review
             db.ToolSpecRevisions.Add(new ToolSpecRevision { TicketId = t.Id, SpecId = id, Revision = rec.CurrentRevision, SubmissionNumber = number, ContentJson = content.ToJsonString(J) });
+            if (kind != "Reuse" && content["system_owner"] is JsonValue eo && eo.TryGetValue<string>(out var evalOwner) && !string.IsNullOrWhiteSpace(evalOwner))
+                (toEvaluate.TryGetValue(evalOwner.Trim(), out var l) ? l : toEvaluate[evalOwner.Trim()] = []).Add(id);
         }
+        // email（spec 10.1）：每位 System Owner 一封；與下面的狀態變更同一次 SaveChanges，所以同一個交易
+        foreach (var (owner, ids) in toEvaluate)
+            EmailOutbox.Queue(db, number > 1 ? EmailEvents.Resubmitted : EmailEvents.Submitted, owner, t.Id, new { number, specs = ids }, time.GetUtcNow());
         db.TicketEvents.Add(new TicketEvent { TicketId = t.Id, Type = "Submit", ActorEmpNo = empNo, At = time.GetUtcNow(), FromValue = t.Status, ToValue = TicketStatus.Submitted, Reason = $"submission #{number}" });
         t.Status = TicketStatus.Submitted;
         await db.SaveChangesAsync(ct);

@@ -61,6 +61,8 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
     public DbSet<AiAgentStudio.Api.Submissions.ToolSpecRevision> ToolSpecRevisions => Set<AiAgentStudio.Api.Submissions.ToolSpecRevision>();
     public DbSet<AiAgentStudio.Api.Submissions.ToolSpecRecord> ToolSpecRecords => Set<AiAgentStudio.Api.Submissions.ToolSpecRecord>();
 
+    public DbSet<AiAgentStudio.Api.Notifications.EmailOutbox> EmailOutbox => Set<AiAgentStudio.Api.Notifications.EmailOutbox>();
+
     /// <summary>啟動時清除遺留的「執行中」標記（spec 2.4）；回傳清除筆數。</summary>
     public int ClearStaleRunning()
     {
@@ -117,6 +119,12 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
             e.ToTable("tool_spec");
             e.HasKey(x => new { x.TicketId, x.SpecId });
             e.Property(x => x.TicketId).HasMaxLength(64);
+        });
+        b.Entity<AiAgentStudio.Api.Notifications.EmailOutbox>(e =>
+        {
+            e.ToTable("email_outbox");
+            e.HasIndex(x => new { x.Status, x.NextAttemptAt });
+            e.Property(x => x.PayloadJson).HasColumnType("jsonb");
         });
         b.Entity<RequirementTicket>(e =>
         {
