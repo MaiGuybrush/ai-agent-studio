@@ -154,4 +154,20 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
         var t = await db.Tickets.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         return t is null ? NotFound() : Ok(View(t, me, await StatusOf(t, ct)));
     }
+
+    /// <summary>複製為 Markdown（spec 6.6）：已完成的單，任何可檢視者都能取；用最新一次送出的 Workflow 快照與各 Tool Spec 目前的 revision。</summary>
+    [HttpGet("{id}/markdown")]
+    public async Task<IActionResult> Markdown(string id, CancellationToken ct)
+    {
+        if (await WhoAsync(ct) is null) return Forbid();
+        var t = await db.Tickets.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t is null) return NotFound();
+        if (await StatusOf(t, ct) != TicketStatus.Completed) return Problem("需求單尚未完成，無法複製。", statusCode: 409);
+        var sub = await db.Submissions.AsNoTracking().Where(x => x.TicketId == id).OrderByDescending(x => x.Number).FirstAsync(ct);
+        var recs = await db.ToolSpecRecords.AsNoTracking().Where(r => r.TicketId == id).ToListAsync(ct);
+        var revs = await db.ToolSpecRevisions.AsNoTracking().Where(r => r.TicketId == id).ToListAsync(ct);
+        var specs = recs.ToDictionary(r => r.SpecId, r => (System.Text.Json.Nodes.JsonObject)System.Text.Json.Nodes.JsonNode.Parse(revs.First(v => v.SpecId == r.SpecId && v.Revision == r.CurrentRevision).ContentJson)!);
+        var md = MarkdownExporter.Build(t.Id, t.Description, (System.Text.Json.Nodes.JsonArray)System.Text.Json.Nodes.JsonNode.Parse(sub.WorkflowJson)!, specs);
+        return Content(md, "text/markdown; charset=utf-8");
+    }
 }
