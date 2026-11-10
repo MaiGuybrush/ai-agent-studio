@@ -11,6 +11,7 @@ export interface TicketPermissions {
   canViewConversation: boolean;
   canChat: boolean;
   canSubmit: boolean;
+  canReopenInterview: boolean; // 已送出（含已完成）且為負責的 CIM Engineer
 }
 
 export interface Ticket {
@@ -69,6 +70,11 @@ export class TicketService {
   }
   reopen(id: string): Promise<Ticket> {
     return firstValueFrom(this.http.post<Ticket>(this.url(`${this.id(id)}/reopen`), {}));
+  }
+  /** 重開 Interview（須附原因），完成後回傳最新的需求單。 */
+  async reopenInterview(id: string, reason: string): Promise<Ticket> {
+    await firstValueFrom(this.http.post(this.url(`${this.id(id)}/interview/reopen`), { reason }));
+    return this.get(id);
   }
   reassign(id: string, newCimEngineerEmpNo: string, reason: string): Promise<Ticket> {
     return firstValueFrom(

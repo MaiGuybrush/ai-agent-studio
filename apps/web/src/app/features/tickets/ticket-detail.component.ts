@@ -2,7 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Ticket, TicketService, errorMessage } from '../../core/tickets/ticket.service';
 
-type Mode = 'cancel' | 'reassign' | null;
+type Mode = 'cancel' | 'reassign' | 'reopenInterview' | null;
 
 @Component({
   selector: 'app-ticket-detail',
@@ -31,6 +31,9 @@ type Mode = 'cancel' | 'reassign' | null;
           }
           @if (t.permissions.canReopen) {
             <button class="action border rounded px-3 py-1" data-action="reopen" (click)="reopen()">重開</button>
+          }
+          @if (t.permissions.canReopenInterview) {
+            <button class="action border rounded px-3 py-1" data-action="reopen-interview" (click)="open('reopenInterview')">重開 Interview</button>
           }
           @if (t.permissions.canReassign) {
             <button class="action border rounded px-3 py-1" data-action="reassign" (click)="open('reassign')">改派</button>
@@ -83,6 +86,7 @@ export class TicketDetailComponent {
   confirm(): void {
     const reason = this.reason().trim();
     if (this.mode() === 'cancel') this.run(() => this.svc.cancel(this.id, reason));
+    else if (this.mode() === 'reopenInterview') this.run(() => this.svc.reopenInterview(this.id, reason));
     else this.run(() => this.svc.reassign(this.id, this.empNo().trim(), reason));
   }
   /** Markdown 由後端產生，這裡只負責寫入剪貼簿（v1 不提供下載）。 */

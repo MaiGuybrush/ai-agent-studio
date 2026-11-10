@@ -6,7 +6,7 @@ import { TicketCreateComponent } from './ticket-create.component';
 import { TicketDetailComponent } from './ticket-detail.component';
 
 const none: TicketPermissions = {
-  canCancel: false, canReopen: false, canReassign: false, canViewConversation: false, canChat: false, canSubmit: false,
+  canCancel: false, canReopen: false, canReassign: false, canViewConversation: false, canChat: false, canSubmit: false, canReopenInterview: false,
 };
 function ticket(p: Partial<TicketPermissions> = {}, o: Partial<Ticket> = {}): Ticket {
   return {
@@ -149,6 +149,22 @@ describe('TicketDetailComponent', () => {
     expect(el(fx).textContent).toContain('已取消');
     expect(el(fx).textContent).toContain('不做了');
     expect(buttons(fx)).toEqual(['reopen']); // 按鈕隨後端回傳的權限切換
+  });
+
+  it('reopen interview needs a reason, then shows the refreshed ticket', async () => {
+    const reopenInterview = vi.fn().mockResolvedValue(ticket({ canCancel: true }));
+    setup({ get: () => Promise.resolve(ticket({ canReopenInterview: true }, { status: '已完成', statusCode: 'Completed' })), reopenInterview });
+    const fx = TestBed.createComponent(TicketDetailComponent);
+    await flush(fx);
+    click(el(fx), '[data-action=reopen-interview]');
+    fx.detectChanges();
+    expect((el(fx).querySelector('button.confirm') as HTMLButtonElement).disabled).toBe(true);
+    type(el(fx), '[name=reason]', '需求變更');
+    fx.detectChanges();
+    click(el(fx), 'button.confirm');
+    await flush(fx);
+    expect(reopenInterview).toHaveBeenCalledWith('T-1', '需求變更');
+    expect(el(fx).querySelector('[data-action=reopen-interview]')).toBeNull();
   });
 
   it('reopen and reassign call the service; errors are shown', async () => {
