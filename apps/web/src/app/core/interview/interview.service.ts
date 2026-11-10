@@ -12,6 +12,9 @@ export interface ChatMessage {
 export interface Conversation {
   running: boolean;
   messages: ChatMessage[];
+  /** 重開 Interview 產生的對話才有（spec 8.6）；previous 是舊對話，可唯讀查閱。 */
+  reopenReason?: string | null;
+  previous?: { id: number; reopenReason: string | null; createdAt: string }[];
 }
 
 export interface WfStep {
@@ -93,6 +96,10 @@ export class InterviewService {
 
   conversation(ticketId: string): Promise<Conversation> {
     return firstValueFrom(this.http.get<Conversation>(this.url(ticketId)));
+  }
+
+  oldConversation(ticketId: string, interviewId: number): Promise<{ messages: ChatMessage[] }> {
+    return firstValueFrom(this.http.get<{ messages: ChatMessage[] }>(this.url(ticketId, `/${interviewId}`)));
   }
 
   workflowDraft(ticketId: string): Promise<WorkflowDraft> {

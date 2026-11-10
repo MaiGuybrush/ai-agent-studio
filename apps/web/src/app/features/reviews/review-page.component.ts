@@ -26,6 +26,18 @@ import { ReviewDetail, ReviewReply, ReviewService } from '../../core/reviews/rev
         </p>
         <h2 class="font-bold">Workflow Definition（唯讀）</h2>
         <pre class="workflow text-xs bg-slate-50 p-2 mb-4 overflow-auto">{{ d.workflow | json }}</pre>
+        @if (d.diff; as df) {
+          <h2 class="font-bold">與 revision {{ df.fromRevision }} 的差異</h2>
+          <table class="diff text-xs mb-4">
+            @for (c of df.changes; track c.path) {
+              <tr>
+                <td class="pr-2 font-mono">{{ c.path }}</td>
+                <td class="before pr-2 text-red-700 line-through">{{ c.before | json }}</td>
+                <td class="after text-green-700">{{ c.after | json }}</td>
+              </tr>
+            }
+          </table>
+        }
         <h2 class="font-bold">Tool Spec（唯讀）</h2>
         <pre class="content text-xs bg-slate-50 p-2 mb-4 overflow-auto">{{ d.content | json }}</pre>
 
