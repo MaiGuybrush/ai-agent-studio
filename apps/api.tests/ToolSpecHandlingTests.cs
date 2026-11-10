@@ -127,6 +127,116 @@ public class ToolSpecHandlingTests : IDisposable
         Assert.Equal("Conditional", (await SpecInfo(f)).GetProperty("state").GetString());
     }
 
+    // ---- 修改後重評 ----
+
+    [Theory]
+    [InlineData("Infeasible")]
+    [InlineData("Conditional")]
+    public async Task Revise_creates_a_new_pending_revision_notifies_the_owner_and_leaves_other_specs_alone(string result)
+    {
+        using var f = await Make();
+        await Reply(f, Owner1, result == "Infeasible" ? Inf : Cond);
+        var before = Outbox(f).Count;
+        var r = await Act(f, "CIM1", "revise", body: new { fields = new { purpose = "改過的用途" } });
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var info = await SpecInfo(f);
+        Assert.Equal(("Pending", 2, false), (info.GetProperty("state").GetString(), info.GetProperty("revision").GetInt32(), info.GetProperty("handled").GetBoolean()));
+        Assert.Equal(1, (await SpecInfo(f, "ts2")).GetProperty("revision").GetInt32());
+        var mail = Outbox(f).Skip(before).Single();
+        Assert.Equal((EmailEvents.Resubmitted, Owner1, "T-1"), (mail.EventType, mail.RecipientEmpNo, mail.TicketId));
+        Assert.Contains("ts1", mail.PayloadJson);
+        var detail = await TicketFactory.Json(await f.As(Owner1).GetAsync("/api/reviews/T-1/ts1"));
+        Assert.Equal(("改過的用途", 2, true), (detail.GetProperty("content").GetProperty("purpose").GetString(), detail.GetProperty("revision").GetInt32(), detail.GetProperty("canReply").GetBoolean()));
+        Assert.Equal("評估中", await Status(f));
+        var ev = f.Events().Last();
+        Assert.Equal(("ToolSpecRevise", "CIM1", "ts1", result, "Pending"), (ev.Type, ev.ActorEmpNo, ev.Reason, ev.FromValue, ev.ToValue));
+    }
+
+    [Fact]
+    public async Task Revise_keeps_the_draft_in_sync_so_a_later_edit_does_not_regress_the_spec()
+    {
+        using var f = await Make();
+        await Reply(f, Owner1, Inf);
+        (await Act(f, "CIM1", "revise", body: new { fields = new { purpose = "改過的用途" } })).EnsureSuccessStatusCode();
+        var draft = await TicketFactory.Json(await f.As("CIM1").GetAsync("/api/tickets/T-1/tool-spec-draft"));
+        Assert.Equal("改過的用途", draft.GetProperty("steps").EnumerateArray().First(s => s.GetProperty("id").GetString() == "ts1").GetProperty("purpose").GetString());
+    }
+
+    [Fact]
+    public async Task Revise_can_reassign_the_system_owner_and_the_new_owner_is_notified()
+    {
+        using var f = await Make();
+        await Reply(f, Owner1, Inf);
+        (await Act(f, "CIM1", "revise", body: new { fields = new { system_owner = Owner2 } })).EnsureSuccessStatusCode();
+        Assert.Equal(Owner2, Outbox(f).Last().RecipientEmpNo);
+    }
+
+    [Fact]
+    public async Task Revise_rejects_feasible_unchanged_invalid_and_reuse_edits()
+    {
+        using var f = await Make();
+        await Reply(f, Owner2, Fea, "ts2");
+        Assert.Equal(HttpStatusCode.Conflict, (await Act(f, "CIM1", "revise", "ts2", new { fields = new { purpose = "x" } })).StatusCode); // 可行不用改
+        await Reply(f, Owner1, Inf);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Act(f, "CIM1", "revise", body: new { fields = new { purpose = "查工單" } })).StatusCode); // 沒有改動
+        Assert.Equal(HttpStatusCode.BadRequest, (await Act(f, "CIM1", "revise", body: new { fields = new { purpose = "" } })).StatusCode); // 必填欄位被清空
+        Assert.Equal(HttpStatusCode.BadRequest, (await Act(f, "CIM1", "revise", body: new { fields = new { kind = "Reuse" } })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Act(f, "CIM1", "revise", body: new { fields = new { system_owner = "99999999" } })).StatusCode); // 查無此人
+        Assert.Equal(1, (await SpecInfo(f)).GetProperty("revision").GetInt32());
+    }
+
+    // ---- 刪除不可行的 Tool Spec ----
+
+    [Fact]
+    public async Task Delete_removes_an_infeasible_spec_and_unlinks_workflow_steps_that_use_it()
+    {
+        using var f = await Make();
+        await Reply(f, Owner1, Inf);
+        var r = await f.As("CIM1").DeleteAsync("/api/tickets/T-1/specs/ts1");
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var sub = await TicketFactory.Json(await f.As("CIM1").GetAsync("/api/tickets/T-1/submission"));
+        Assert.DoesNotContain(sub.GetProperty("toolSpecs").EnumerateArray(), x => x.GetProperty("specId").GetString() == "ts1");
+        var steps = (await TicketFactory.Json(await f.As("CIM1").GetAsync("/api/tickets/T-1/workflow-draft"))).GetProperty("steps").EnumerateArray().ToList();
+        Assert.False(steps.First(s => s.GetProperty("id").GetString() == "s1").TryGetProperty("tool_spec", out _)); // 調整為人工步驟
+        Assert.Equal("ts2", steps.First(s => s.GetProperty("id").GetString() == "s2").GetProperty("tool_spec").GetString());
+        var specs = (await TicketFactory.Json(await f.As("CIM1").GetAsync("/api/tickets/T-1/tool-spec-draft"))).GetProperty("steps").EnumerateArray();
+        Assert.DoesNotContain(specs, s => s.GetProperty("id").GetString() == "ts1");
+        // 最新一次 submission 的 Workflow Definition 快照已調整，舊的保持不變
+        var subs = sub.GetProperty("submissions").EnumerateArray().ToList();
+        Assert.False(subs.Last().GetProperty("workflow")[0].TryGetProperty("tool_spec", out _));
+        Assert.Equal("ts1", subs.First().GetProperty("workflow")[0].GetProperty("tool_spec").GetString());
+        var ev = f.Events().Last();
+        Assert.Equal(("ToolSpecDelete", "CIM1", "ts1", "Infeasible"), (ev.Type, ev.ActorEmpNo, ev.Reason, ev.FromValue));
+        Assert.Equal("評估中", await Status(f)); // ts2 還在待評估
+    }
+
+    [Fact]
+    public async Task Delete_only_applies_to_infeasible_specs_and_only_for_the_responsible_engineer()
+    {
+        using var f = await Make();
+        await Reply(f, Owner1, Cond);
+        Assert.Equal(HttpStatusCode.Conflict, (await f.As("CIM1").DeleteAsync("/api/tickets/T-1/specs/ts1")).StatusCode);
+        await Reply(f, Owner1, Inf);
+        Assert.Equal(HttpStatusCode.Forbidden, (await f.As("CIM2").DeleteAsync("/api/tickets/T-1/specs/ts1")).StatusCode);
+    }
+
+    [Fact]
+    public async Task When_all_specs_are_infeasible_the_state_says_so_and_the_last_one_cannot_be_deleted()
+    {
+        using var f = await Make();
+        Assert.Equal(HttpStatusCode.Conflict, (await f.As("CIM1").DeleteAsync("/api/tickets/T-1/specs/ts3")).StatusCode); // Reuse 不是不可行，不能刪
+        await Reply(f, Owner1, Inf); await Reply(f, Owner2, Inf, "ts2");
+        Assert.False((await TicketFactory.Json(await f.As("CIM1").GetAsync("/api/tickets/T-1/submission"))).GetProperty("allInfeasible").GetBoolean()); // ts3 是 Reuse
+        // 把 Reuse 從資料庫移除，模擬「只有兩份、全部不可行」
+        using (var s = f.Services.CreateScope()) { var db = s.ServiceProvider.GetRequiredService<StudioDb>(); db.ToolSpecRecords.Remove(db.ToolSpecRecords.First(x => x.SpecId == "ts3")); db.SaveChanges(); }
+        Assert.True((await TicketFactory.Json(await f.As("CIM1").GetAsync("/api/tickets/T-1/submission"))).GetProperty("allInfeasible").GetBoolean());
+        Assert.Equal("評估中", await Status(f)); // 不自動取消
+        Assert.Equal(HttpStatusCode.OK, (await f.As("CIM1").DeleteAsync("/api/tickets/T-1/specs/ts1")).StatusCode);
+        var last = await f.As("CIM1").DeleteAsync("/api/tickets/T-1/specs/ts2");
+        Assert.Equal(HttpStatusCode.Conflict, last.StatusCode);
+        Assert.Contains("Cancellation", await last.Content.ReadAsStringAsync());
+    }
+
     // ---- 實作中 ----
 
     [Fact]

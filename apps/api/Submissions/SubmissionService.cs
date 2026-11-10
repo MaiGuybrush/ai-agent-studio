@@ -98,6 +98,7 @@ public class SubmissionService(StudioDb db, WorkflowDraftService drafts, ToolSpe
             rec ??= db.ToolSpecRecords.Add(new ToolSpecRecord { TicketId = t.Id, SpecId = id }).Entity;
             rec.Kind = kind;
             rec.CurrentRevision = (rec.CurrentRevision) + 1;
+            rec.Handled = false; rec.AcceptedCondition = null; // 重評：System Owner 可再回覆（spec 9）
             rec.State = kind == "Reuse" ? ToolSpecState.Implemented : ToolSpecState.Pending; // Reuse 不需要 Feasibility Review
             db.ToolSpecRevisions.Add(new ToolSpecRevision { TicketId = t.Id, SpecId = id, Revision = rec.CurrentRevision, SubmissionNumber = number, ContentJson = content.ToJsonString(J) });
             if (kind != "Reuse" && content["system_owner"] is JsonValue eo && eo.TryGetValue<string>(out var evalOwner) && !string.IsNullOrWhiteSpace(evalOwner))
