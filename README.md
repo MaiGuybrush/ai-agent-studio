@@ -23,6 +23,13 @@ cd apps/agent && python -m venv .venv && .venv/Scripts/python -m pip install -r 
 打開 http://localhost:4200 ，在 mock 登入頁選使用者（見 `tools/mock-users.json`）：
 `10000001`（CIM100，是 CIM Engineer）、`10000002`（MFG200，否）、`10000003`（無部門，fail closed 並顯示錯誤）。
 
+## Interview（#17）
+
+- Python agent：複製 `apps/agent/config.example.toml` 為 `config.toml`（不進 git），填 C# 呼叫用的 `api_key` 與公司核准的模型端點；agent 指令在 `apps/agent/app/instructions.md`（git 管理）。啟動後綁 `127.0.0.1:8100`。
+- C# 設定：`Agent:BaseUrl`（預設 `http://127.0.0.1:8100`）、`Agent:ApiKey`（須等於 Python 的 `api_key`）、`Agent:ToolApiBaseUrl`（Python 回呼的 tool API，預設 `http://127.0.0.1:5080`）、`Agent:RunTokenSecret`（未設則每次啟動隨機）。
+- API：`GET/POST /api/tickets/{id}/interview[/messages|/events|/cancel]`；`POST messages` 的回應即 SSE 串流，斷線用 `GET events` + `Last-Event-ID` 重連。內部 tool API：`/internal/tools/*`，只認 `X-Run-Token`。
+- 畫面：`#/tickets`（清單、建單）、`#/tickets/{id}`（取消／重開／改派）、`#/tickets/{id}/interview`（三欄）。
+
 ## PostgreSQL（本機以 podman；只有 C# 連線）
 
 #16 起 API 使用 DB（需求單、`ticket_event`；EF Core migrations 在 `apps/api/Tickets/Migrations`，API 啟動時自動套用）。啟動（已建立過則 `podman start aas-pg`）：
