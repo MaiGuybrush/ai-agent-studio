@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { Ticket, TicketService } from '../../core/tickets/ticket.service';
-import { ChatMessage, Conversation, InterviewService, SubmissionState, ToolSpecDraft, WorkflowDraft } from '../../core/interview/interview.service';
+import { ChatMessage, ComplianceReport, Conversation, InterviewService, SubmissionState, ToolSpecDraft, WorkflowDraft } from '../../core/interview/interview.service';
 import { SseMessage } from '../../core/interview/sse';
 import { InterviewPageComponent } from './interview-page.component';
 
@@ -52,6 +52,7 @@ function setup(opts: { ticket: Ticket; conv?: Conversation }) {
     saveToolSpecDraft: vi.fn(),
     handleSpec: vi.fn(() => Promise.resolve({})),
     deleteSpec: vi.fn(() => Promise.resolve({})),
+    markImplemented: vi.fn((): Promise<ComplianceReport> => Promise.resolve({ passed: true, failures: [], warnings: [] })),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -471,6 +472,39 @@ describe('InterviewPageComponent', () => {
     it('points to Cancellation when all specs are infeasible', async () => {
       const b = await handled({ allInfeasible: true, toolSpecs: specs.map((s) => ({ ...s, state: 'Infeasible' })) });
       expect(b.root.querySelector('.cancel-hint')!.textContent).toContain('Cancellation');
+    });
+  });
+
+  describe('interface compliance check (#29)', () => {
+    const specs = [{ specId: 'ts1', kind: 'New', state: 'Implementing', revision: 1 }, { specId: 'ts2', kind: 'New', state: 'Feasible', revision: 1 }];
+    const setupImpl = async () => {
+      const r = setup({ ticket: ticket(false, { status: '實作中' }) });
+      r.sub.current = { ...r.sub.current, stage: 6, toolSpecs: specs, submissions: [{ number: 1 }], canHandle: true };
+      r.fx.detectChanges(); await r.settle();
+      return r;
+    };
+    const row = (root: HTMLElement, id: string) => Array.from(root.querySelectorAll('.progress-row')).find((r) => r.textContent!.includes(id)) as HTMLElement;
+    const fill = (el: HTMLInputElement, v: string) => { el.value = v; el.dispatchEvent(new Event('input')); };
+
+    it('only offers the check on implementing specs and sends serverKey and toolName', async () => {
+      const { fx, root, svc, settle } = await setupImpl();
+      expect(row(root, 'ts2').querySelector('.implemented-open')).toBeNull();
+      (row(root, 'ts1').querySelector('.implemented-open') as HTMLButtonElement).click(); fx.detectChanges();
+      fill(row(root, 'ts1').querySelector('input.impl-server') as HTMLInputElement, 'gw');
+      fill(row(root, 'ts1').querySelector('input.impl-tool') as HTMLInputElement, 'get_order'); fx.detectChanges();
+      (row(root, 'ts1').querySelector('.implemented-send') as HTMLButtonElement).click(); await settle();
+      expect(svc.markImplemented).toHaveBeenCalledWith('T-1', 'ts1', 'gw', 'get_order');
+    });
+
+    it('shows the failure report and warnings', async () => {
+      const { fx, root, svc, settle } = await setupImpl();
+      svc.markImplemented.mockResolvedValueOnce({ passed: false, failures: ['inputs.eqptId：型別不符'], warnings: ['outputs.equipmentId 命中別名'] });
+      (row(root, 'ts1').querySelector('.implemented-open') as HTMLButtonElement).click(); fx.detectChanges();
+      fill(row(root, 'ts1').querySelector('input.impl-server') as HTMLInputElement, 'gw');
+      fill(row(root, 'ts1').querySelector('input.impl-tool') as HTMLInputElement, 't'); fx.detectChanges();
+      (row(root, 'ts1').querySelector('.implemented-send') as HTMLButtonElement).click(); await settle(); fx.detectChanges();
+      expect(row(root, 'ts1').querySelector('.compliance-failures')!.textContent).toContain('型別不符');
+      expect(row(root, 'ts1').querySelector('.compliance-warnings')!.textContent).toContain('別名');
     });
   });
 });

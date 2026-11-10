@@ -20,6 +20,7 @@ public static class EmailTemplates
             EmailEvents.Resubmitted => Spec("需求單重新送評", "需求單已重新送出，請您重新評估下列 Tool Spec", row.TicketId, specs, link),
             EmailEvents.Replied => Spec("回覆評估結果", "System Owner 已回覆評估結果，Tool Spec", row.TicketId, specs, link),
             EmailEvents.Commented => Spec("有新留言", "Tool Spec 有新留言，請前往查看", row.TicketId, specs, link),
+            EmailEvents.Completed => Spec("需求單已完成", "需求單的所有 Tool Spec 皆已實作，需求單已完成，Tool Spec", row.TicketId, specs, link),
             EmailEvents.OwnerReassigned => Spec("轉派 System Owner", "您被指派為 System Owner，請評估下列 Tool Spec", row.TicketId, specs, link),
             _ => throw new EmailSendException($"未知的事件類型 '{row.EventType}'。", false),
         };
