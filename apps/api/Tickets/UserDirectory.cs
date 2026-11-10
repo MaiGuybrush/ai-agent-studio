@@ -8,7 +8,7 @@ using AiAgentStudio.Api.Services;
 
 namespace AiAgentStudio.Api.Tickets;
 
-public sealed record DirectoryUser(string EmpNo, string Name);
+public sealed record DirectoryUser(string EmpNo, string Name, string? AdId = null);
 
 /// <summary>以工號查姓名（UAC basic-info，免認證；只用來帶出資料，不能用於授權）。</summary>
 public interface IUserDirectory
@@ -33,11 +33,14 @@ public sealed class UacUserDirectory(IHttpClientFactory http, IConsulAddressProv
                 if (res.StatusCode == HttpStatusCode.NotFound) return null;
                 res.EnsureSuccessStatusCode();
                 using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct));
+                string? name = null, adId = null;
                 foreach (var p in doc.RootElement.EnumerateObject())
-                    if (p.Name.Equals("empName", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.String
-                        && !string.IsNullOrWhiteSpace(p.Value.GetString()))
-                        return new DirectoryUser(empNo, p.Value.GetString()!);
-                return null; // 回應沒有姓名視同查無此人
+                {
+                    if (p.Value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(p.Value.GetString())) continue;
+                    if (p.Name.Equals("empName", StringComparison.OrdinalIgnoreCase)) name = p.Value.GetString();
+                    else if (p.Name.Equals("adId", StringComparison.OrdinalIgnoreCase)) adId = p.Value.GetString(); // spec 3.1：email = adId@網域
+                }
+                return name is null ? null : new DirectoryUser(empNo, name, adId); // 回應沒有姓名視同查無此人
             }
             catch (Exception e) when ((e is HttpRequestException or JsonException or TaskCanceledException) && !ct.IsCancellationRequested)
             {
