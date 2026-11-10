@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Ticket, TicketService, errorMessage } from '../../core/tickets/ticket.service';
-import { ChatMessage, InterviewService } from '../../core/interview/interview.service';
+import { ChatMessage, InterviewService, WfStep, WorkflowDraft } from '../../core/interview/interview.service';
 import { SseMessage } from '../../core/interview/sse';
 
 // spec 8.2 的 grill 流程；#17 還沒有階段進度的資料來源，先一律停在第 1 階段（之後由後端提供）。
@@ -23,7 +23,10 @@ const MAX_RECONNECT = 5;
     .msg.user { background: #dbeafe; align-self: flex-end; }
     .stage { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #e5e7eb; color: #6b7280; margin-bottom: 4px; }
     .stage.cur { background: #2563eb; color: #fff; }
-    .tab { padding: 2px 10px; border: 1px solid #cbd5e1; border-radius: 4px; margin-right: 4px; }
+    .human { background: #fef3c7; }
+    .badge { font-size: 11px; color: #b45309; margin-left: 4px; }
+    .step { border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px; margin-top: 6px; }
+    .tab { cursor: pointer; padding: 2px 10px; border: 1px solid #cbd5e1; border-radius: 4px; margin-right: 4px; }
   `],
   template: `
     <div class="grid3">
@@ -71,10 +74,43 @@ const MAX_RECONNECT = 5;
       </section>
 
       <aside class="col-right">
-        @for (t of tabs; track t) {
-          <span class="tab text-sm">{{ t }}</span>
+        @for (t of tabs; track $index) {
+          <span class="tab text-sm" [class.font-semibold]="$index === tab()" (click)="tab.set($index)">{{ t }}</span>
         }
-        <p class="text-sm text-slate-500 mt-4">草稿內容會在後續功能加入。</p>
+        @if (tab() === 0) {
+          <div class="wf mt-2">
+            @for (st of steps(); track st.id; let i = $index) {
+              <div class="step">
+                <div class="text-xs text-slate-500">{{ i + 1 }}. {{ st.id }}
+                  @if (canChat()) { <button class="del text-red-600 ml-2" (click)="removeStep(st.id)">刪除</button> }
+                </div>
+                <label class="block text-xs">說明@if (human(st.id, 'description')) { <span class="badge">人工修改</span> }
+                  <textarea class="f-description w-full border rounded p-1" [class.human]="human(st.id, 'description')" [disabled]="!canChat()"
+                    [value]="st.description ?? ''" (input)="edit(st.id, 'description', val($event))"></textarea></label>
+                <label class="block text-xs">Tool Spec（空白 = 人工步驟）@if (human(st.id, 'tool_spec')) { <span class="badge">人工修改</span> }
+                  <input class="f-tool_spec w-full border rounded p-1" [class.human]="human(st.id, 'tool_spec')" [disabled]="!canChat()"
+                    [value]="st.tool_spec ?? ''" (input)="edit(st.id, 'tool_spec', val($event) || null)" /></label>
+                <label class="block text-xs">條件@if (human(st.id, 'condition')) { <span class="badge">人工修改</span> }
+                  <input class="f-condition w-full border rounded p-1" [class.human]="human(st.id, 'condition')" [disabled]="!canChat()"
+                    [value]="st.condition ?? ''" (input)="edit(st.id, 'condition', val($event))" /></label>
+                <label class="text-xs"><input type="checkbox" class="f-needs_approval" [checked]="!!st.needs_approval" [disabled]="!canChat()"
+                  (change)="edit(st.id, 'needs_approval', checked($event))" /> 需要人工核准@if (human(st.id, 'needs_approval')) { <span class="badge">人工修改</span> }</label>
+                <div class="text-xs text-slate-500">輸入：{{ json(st.inputs) }}　輸出：{{ (st.outputs ?? []).join(', ') }}</div>
+              </div>
+            } @empty {
+              <p class="text-sm text-slate-500">尚無步驟；agent 會在訪談中逐步建立。</p>
+            }
+            @if (draftError(); as de) { <p class="draft-error text-sm text-red-600">{{ de }}</p> }
+            @if (canChat()) {
+              <div class="mt-2">
+                <button class="add border rounded px-2 mr-2" (click)="addStep()">新增步驟</button>
+                <button class="save border rounded px-2 bg-blue-600 text-white" [disabled]="!dirty()" (click)="saveDraft()">儲存草稿</button>
+              </div>
+            }
+          </div>
+        } @else {
+          <p class="text-sm text-slate-500 mt-4">此分頁內容會在後續功能加入。</p>
+        }
       </aside>
     </div>
   `,
@@ -91,6 +127,11 @@ export class InterviewPageComponent {
   readonly running = signal(false);
   readonly error = signal<string | null>(null);
   readonly draft = signal('');
+  readonly tab = signal(0);
+  readonly wf = signal<WorkflowDraft | null>(null);
+  readonly steps = signal<WfStep[]>([]);
+  readonly dirty = signal(false);
+  readonly draftError = signal<string | null>(null);
   private lastEventId: string | null = null;
 
   constructor() {
@@ -100,6 +141,57 @@ export class InterviewPageComponent {
   canChat(): boolean {
     return !!this.ticket()?.permissions.canChat;
   }
+  checked(e: Event): boolean {
+    return (e.target as HTMLInputElement).checked;
+  }
+  json(v: unknown): string {
+    return v ? JSON.stringify(v) : '';
+  }
+  /** 這個欄位（或整步）是否被人工修改過（標記由後端保留到 Interview 送出）。 */
+  human(id: string, field: string): boolean {
+    const m = this.wf()?.humanEdits ?? [];
+    return m.includes(`steps.${id}.${field}`) || m.includes(`steps.${id}`);
+  }
+  edit(id: string, field: keyof WfStep, value: unknown): void {
+    this.steps.update((l) => l.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
+    this.dirty.set(true);
+  }
+  addStep(): void {
+    const ids = new Set(this.steps().map((s) => s.id));
+    let n = this.steps().length + 1;
+    while (ids.has(`s${n}`)) n++;
+    this.steps.update((l) => [...l, { id: `s${n}`, description: '' }]);
+    this.dirty.set(true);
+  }
+  removeStep(id: string): void {
+    this.steps.update((l) => l.filter((s) => s.id !== id));
+    this.dirty.set(true);
+  }
+
+  private async loadDraft(): Promise<void> {
+    try {
+      const d = await this.interview.workflowDraft(this.id);
+      this.wf.set(d);
+      this.steps.set(structuredClone(d.steps));
+      this.dirty.set(false);
+    } catch { /* 草稿載入失敗不影響對話 */ }
+  }
+
+  async saveDraft(): Promise<void> {
+    this.draftError.set(null);
+    try {
+      const d = await this.interview.saveWorkflowDraft(this.id, this.wf()!.version, this.steps());
+      this.wf.set(d);
+      this.steps.set(structuredClone(d.steps));
+      this.dirty.set(false);
+    } catch (e) {
+      if ((e as { status?: number }).status === 409) {
+        this.draftError.set('草稿已被更新（agent 或其他人剛修改），已載入最新版本，請確認後重新修改。');
+        await this.loadDraft();
+      } else this.draftError.set(errorMessage(e, '儲存草稿失敗。'));
+    }
+  }
+
   val(e: Event): string {
     return (e.target as HTMLTextAreaElement).value;
   }
@@ -109,6 +201,7 @@ export class InterviewPageComponent {
       const [t, c] = await Promise.all([this.tickets.get(this.id), this.interview.conversation(this.id)]);
       this.ticket.set(t);
       this.messages.set(c.messages);
+      await this.loadDraft();
       if (c.running) await this.consume(() => this.interview.reconnect(this.id, null));
     } catch (e) {
       this.error.set(errorMessage(e, '無法載入 Interview。'));
@@ -151,6 +244,8 @@ export class InterviewPageComponent {
           if (m.type === 'text') {
             if (!reply) { this.messages.update((l) => [...l, { role: 'assistant', text: '' }]); reply = true; }
             this.messages.update((l) => [...l.slice(0, -1), { role: 'assistant', text: l[l.length - 1].text + m.data.text }]);
+          } else if (m.type === 'draft_changed') {
+            if (!this.dirty()) void this.loadDraft(); // 有未存的編輯時不蓋掉，存檔時由版本號偵測衝突
           } else if (m.type === 'error') {
             this.error.set(m.data.code === 'model_busy' ? '模型額度不足或忙碌，請稍後再試' : m.data.code === 'cancelled' ? '已中止' : m.data.message || '回覆失敗，請重試。');
           }
@@ -164,6 +259,7 @@ export class InterviewPageComponent {
     }
     if (!ended) this.error.set('與伺服器的連線中斷，請重新整理。');
     try {
+      if (!this.dirty()) await this.loadDraft();
       this.messages.set((await this.interview.conversation(this.id)).messages);
     } catch { /* 保留畫面現況 */ }
     this.running.set(false);
