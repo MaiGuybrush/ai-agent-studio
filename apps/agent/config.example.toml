@@ -1,0 +1,8 @@
+# 複製為 config.toml（已列入 .gitignore）。C# 以 X-Agent-Key 帶這個 api_key 呼叫 /runs。
+api_key = "change-me"
+
+[model]
+# 公司核准的 OpenAI 相容端點
+name = "gpt-xxx"
+base_url = "https://llm.example.internal/v1"
+api_key = "sk-..."
