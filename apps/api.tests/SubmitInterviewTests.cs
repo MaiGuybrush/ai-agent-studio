@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AiAgentStudio.Api.Interviews;
+using AiAgentStudio.Api.Notifications;
+using Microsoft.Extensions.Options;
 using AiAgentStudio.Api.Studio;
 using AiAgentStudio.Api.Submissions;
 using AiAgentStudio.Api.Tickets;
@@ -19,7 +21,8 @@ namespace AiAgentStudio.Api.Tests;
 public class SubmitInterviewTests : IDisposable
 {
     readonly string path = Path.Combine(Path.GetTempPath(), $"studio-{Guid.NewGuid():N}.json");
-    public void Dispose() => File.Delete(path);
+    readonly string mailDir = Path.Combine(Path.GetTempPath(), $"mail-{Guid.NewGuid():N}");
+    public void Dispose() { File.Delete(path); if (Directory.Exists(mailDir)) Directory.Delete(mailDir, true); }
 
     readonly FakeSource src = new() { Sha = "sha1", Text = Entries("eqptId", "status") };
     readonly FakeTimeProvider time = new(DateTimeOffset.UtcNow);
@@ -32,7 +35,7 @@ public class SubmitInterviewTests : IDisposable
         public Task<ProposalIssue> CreateAsync(VocabularyProposal p, CancellationToken ct) => Task.FromResult(new ProposalIssue(1, "https://gitea.test/issues/1"));
     }
 
-    class Factory(string path, FakeSource src, TimeProvider time) : InterviewFactory
+    class Factory(string path, FakeSource src, TimeProvider time, string mailDir) : InterviewFactory
     {
         protected override void ConfigureWebHost(IWebHostBuilder b)
         {
@@ -44,6 +47,7 @@ public class SubmitInterviewTests : IDisposable
                 s.RemoveAll<IVocabularyAlert>(); s.AddSingleton<IVocabularyAlert>(new FakeAlert());
                 s.RemoveAll<IVocabularyProposalClient>(); s.AddSingleton<IVocabularyProposalClient>(new FakeProposals());
                 s.RemoveAll<TimeProvider>(); s.AddSingleton(time);
+                s.RemoveAll<IEmailSender>(); s.AddSingleton<IEmailSender>(new LocalFolderEmailSender(Options.Create(new EmailOptions { LocalFolder = mailDir })));
             });
         }
     }
@@ -51,7 +55,7 @@ public class SubmitInterviewTests : IDisposable
     async Task<Factory> Make()
     {
         File.WriteAllText(path, """{ "mcpServers": {}, "systems": { "MES": "10000001", "ERP": "10000002" } }""");
-        var f = new Factory(path, src, time);
+        var f = new Factory(path, src, time, mailDir);
         f.Names["10000001"] = "MES 負責人"; f.Names["10000002"] = "ERP 負責人";
         await f.Seed();
         return f;
@@ -300,5 +304,82 @@ public class SubmitInterviewTests : IDisposable
         Assert.Equal(5, await Stage());                                                   // 剩 System Owner 等待處理
         await Upsert(Agent(f), "ts1", new { system_owner = "10000001" });
         Assert.Equal(6, await Stage());                                                   // 可以送出
+    }
+
+    // ---- #25：送出時寫入 email_outbox（同一交易），寄給 System Owner ----
+
+    static List<EmailOutbox> Outbox(InterviewFactory f)
+    {
+        using var s = f.Services.CreateScope();
+        return s.ServiceProvider.GetRequiredService<StudioDb>().EmailOutbox.AsNoTracking().OrderBy(x => x.Id).ToList();
+    }
+    static async Task Dispatch(InterviewFactory f)
+    {
+        using var s = f.Services.CreateScope();
+        await s.ServiceProvider.GetRequiredService<EmailOutboxDispatcher>().DispatchDueAsync(default);
+    }
+
+    [Fact]
+    public async Task Submit_queues_one_email_per_system_owner_by_empNo_and_local_folder_sender_delivers_it()
+    {
+        using var f = await Make();
+        await Upsert(Agent(f), "ts1", Spec(owner: "10000001"));
+        await Upsert(Agent(f), "ts2", Spec("Extend", owner: "10000001"));
+        await Upsert(Agent(f), "ts3", Spec(owner: "10000002", system: "ERP"));
+        await Upsert(Agent(f), "ts4", Spec("Reuse"));
+        Assert.Empty(Outbox(f));
+
+        Assert.Equal(HttpStatusCode.OK, (await Submit(f.As("CIM1"))).StatusCode);
+
+        var rows = Outbox(f);
+        Assert.Equal(["10000001", "10000002"], rows.Select(r => r.RecipientEmpNo).ToArray()); // 只存工號
+        Assert.All(rows, r => Assert.Equal((EmailEvents.Submitted, "T-1", EmailOutbox.Pending), (r.EventType, r.TicketId, r.Status)));
+
+        await Dispatch(f);
+        Assert.All(Outbox(f), r => Assert.Equal(EmailOutbox.Sent, r.Status));
+        var mails = Directory.GetFiles(mailDir).Select(File.ReadAllText).ToList();
+        Assert.Equal(2, mails.Count);
+        var owner1 = Assert.Single(mails, m => m.Contains("ad10000001@innolux.com"));
+        Assert.Contains("ts1", owner1); Assert.Contains("ts2", owner1); Assert.DoesNotContain("ts3", owner1); Assert.DoesNotContain("ts4", owner1);
+        Assert.Contains("T-1", owner1);
+        Assert.Contains("/tickets/T-1", owner1);
+        Assert.DoesNotContain("查工單", owner1); // 不附 Tool Spec 內容
+    }
+
+    [Fact]
+    public async Task Reuse_only_or_blocked_submit_queues_nothing()
+    {
+        using var f = await Make();
+        await Upsert(Agent(f), "ts1", Spec("Reuse"));
+        await Submit(f.As("CIM1"));
+        Assert.Empty(Outbox(f));
+
+        using var g = await Make();
+        await Upsert(Agent(g), "ts1", Spec(owner: null));
+        Assert.Equal(HttpStatusCode.Conflict, (await Submit(g.As("CIM1"))).StatusCode);
+        Assert.Empty(Outbox(g));
+    }
+
+    [Fact]
+    public async Task Resubmit_queues_a_reevaluation_email_only_for_changed_specs()
+    {
+        using var f = await Make();
+        await Upsert(Agent(f), "ts1", Spec(owner: "10000001"));
+        await Upsert(Agent(f), "ts2", Spec(owner: "10000002", system: "ERP"));
+        await Submit(f.As("CIM1"));
+
+        using (var s = f.Services.CreateScope()) // 模擬重開訪談（之後的 ticket 才會提供入口）
+        {
+            var db = s.ServiceProvider.GetRequiredService<StudioDb>();
+            db.Tickets.Single().Status = TicketStatus.Interviewing;
+            await db.SaveChangesAsync();
+        }
+        await Upsert(Agent(f), "ts1", new { purpose = "改過的用途" });
+        Assert.Equal(HttpStatusCode.OK, (await Submit(f.As("CIM1"))).StatusCode);
+
+        var again = Outbox(f).Where(r => r.EventType == EmailEvents.Resubmitted).ToList();
+        var row = Assert.Single(again);
+        Assert.Equal("10000001", row.RecipientEmpNo);
+        Assert.Equal(3, Outbox(f).Count);
     }
 }

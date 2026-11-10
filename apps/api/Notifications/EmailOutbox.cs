@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using AiAgentStudio.Api.Tickets;
 
 namespace AiAgentStudio.Api.Notifications;
 
@@ -22,6 +23,14 @@ public class EmailOutbox
     public string? LastError { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? SentAt { get; set; }
+
+    /// <summary>加入一筆待寄（不呼叫 SaveChanges）：呼叫端與狀態變更一起存檔，才是同一個交易。之後的事件（轉派、留言…）都走這個入口。</summary>
+    public static EmailOutbox Queue(StudioDb db, string eventType, string recipientEmpNo, string ticketId, object payload, DateTimeOffset now) =>
+        db.EmailOutbox.Add(new EmailOutbox
+        {
+            EventType = eventType, RecipientEmpNo = recipientEmpNo, TicketId = ticketId, CreatedAt = now, NextAttemptAt = now,
+            PayloadJson = System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }),
+        }).Entity;
 }
 
 /// <summary>spec 10.1 的事件類型。</summary>

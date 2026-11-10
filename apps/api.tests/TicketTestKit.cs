@@ -39,7 +39,7 @@ public class TicketFactory : WebApplicationFactory<Program>
     class FakeDirectory(TicketFactory f) : IUserDirectory
     {
         public Task<DirectoryUser?> FindAsync(string empNo, CancellationToken ct) =>
-            Task.FromResult(f.Names.TryGetValue(empNo, out var n) ? new DirectoryUser(empNo, n) : null);
+            Task.FromResult(f.Names.TryGetValue(empNo, out var n) ? new DirectoryUser(empNo, n, "ad" + empNo) : null);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder b)
