@@ -70,7 +70,7 @@ const MAX_RECONNECT = 5;
             @if (stage() >= 5 && sb.blockers.length) {
               <ul class="blocker-list">@for (b of sb.blockers; track $index) { <li>{{ b.message }}</li> }</ul>
             }
-            @if (stage() === 6 && ticket()?.permissions.canSubmit) {
+            @if (stage() === 6 && canSubmitTicket()) {
               <button class="submit-interview border rounded px-3 ml-2 bg-green-600 text-white" [disabled]="!sb.canSubmit || submitting()" (click)="submitInterview()">送出 Interview</button>
             }
             @if (submitError(); as se2) { <p class="submit-error text-sm text-red-600">{{ se2 }}</p> }
@@ -163,8 +163,8 @@ const MAX_RECONNECT = 5;
                       @default {
                         <span class="text-blue-700">新名詞（待 CIM Engineer 確認）</span>
                         @if (canChat()) {
-                          <input class="term-explanation border rounded px-1 ml-1" placeholder="說明（必填）" [value]="explanations()[n.path] ?? ''" (input)="explain(n.path, val($event))" />
-                          <button class="confirm-term border rounded px-1 ml-1" [disabled]="!(explanations()[n.path] ?? '').trim()" (click)="confirmTerm(n.path)">確認新名詞</button>
+                          <input class="term-explanation border rounded px-1 ml-1" placeholder="說明（必填）" [value]="explained(n.path)" (input)="explain(n.path, val($event))" />
+                          <button class="confirm-term border rounded px-1 ml-1" [disabled]="!explained(n.path).trim()" (click)="confirmTerm(n.path)">確認新名詞</button>
                         }
                         @if (confirmError(); as ce) { <span class="text-red-600">{{ ce }}</span> }
                       }
@@ -263,6 +263,9 @@ export class InterviewPageComponent {
     if (sp.system_owner && !opts.has(sp.system_owner)) opts.set(sp.system_owner, sp.system_owner);
     return [...opts].map(([empNo, label]) => ({ empNo, label }));
   }
+  explained(path: string): string {
+    return this.explanations()[path] ?? '';
+  }
   explain(path: string, v: string): void {
     this.explanations.update((m) => ({ ...m, [path]: v }));
   }
@@ -297,6 +300,9 @@ export class InterviewPageComponent {
     }
   }
 
+  canSubmitTicket(): boolean {
+    return !!this.ticket()?.permissions.canSubmit;
+  }
   canChat(): boolean {
     return !!this.ticket()?.permissions.canChat;
   }
