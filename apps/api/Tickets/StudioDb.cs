@@ -57,6 +57,10 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
     public DbSet<AiAgentStudio.Api.Vocabulary.PendingTerm> PendingTerms => Set<AiAgentStudio.Api.Vocabulary.PendingTerm>();
     public DbSet<AiAgentStudio.Api.Interviews.AgentRun> AgentRuns => Set<AiAgentStudio.Api.Interviews.AgentRun>();
 
+    public DbSet<AiAgentStudio.Api.Submissions.Submission> Submissions => Set<AiAgentStudio.Api.Submissions.Submission>();
+    public DbSet<AiAgentStudio.Api.Submissions.ToolSpecRevision> ToolSpecRevisions => Set<AiAgentStudio.Api.Submissions.ToolSpecRevision>();
+    public DbSet<AiAgentStudio.Api.Submissions.ToolSpecRecord> ToolSpecRecords => Set<AiAgentStudio.Api.Submissions.ToolSpecRecord>();
+
     /// <summary>啟動時清除遺留的「執行中」標記（spec 2.4）；回傳清除筆數。</summary>
     public int ClearStaleRunning()
     {
@@ -95,6 +99,24 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
             e.ToTable("pending_term");
             e.HasIndex(x => x.Term);
             e.Property(x => x.AliasesJson).HasColumnType("jsonb");
+        });
+        b.Entity<AiAgentStudio.Api.Submissions.Submission>(e =>
+        {
+            e.ToTable("submission");
+            e.HasIndex(x => new { x.TicketId, x.Number }).IsUnique();
+            e.Property(x => x.WorkflowJson).HasColumnType("jsonb");
+        });
+        b.Entity<AiAgentStudio.Api.Submissions.ToolSpecRevision>(e =>
+        {
+            e.ToTable("tool_spec_revision");
+            e.HasIndex(x => new { x.TicketId, x.SpecId, x.Revision }).IsUnique();
+            e.Property(x => x.ContentJson).HasColumnType("jsonb");
+        });
+        b.Entity<AiAgentStudio.Api.Submissions.ToolSpecRecord>(e =>
+        {
+            e.ToTable("tool_spec");
+            e.HasKey(x => new { x.TicketId, x.SpecId });
+            e.Property(x => x.TicketId).HasMaxLength(64);
         });
         b.Entity<RequirementTicket>(e =>
         {

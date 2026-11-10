@@ -47,6 +47,7 @@ public class WorkflowDraftService(StudioDb db, TimeProvider time)
 
     async Task<WorkflowDraft> Load(string ticketId, string coll) =>
         await db.WorkflowDrafts.FirstOrDefaultAsync(x => x.TicketId == ticketId && x.Doc == coll)
+        ?? db.WorkflowDrafts.Local.FirstOrDefault(x => x.TicketId == ticketId && x.Doc == coll) // 同一個 request 內先前新增、尚未存檔的
         ?? db.WorkflowDrafts.Add(new WorkflowDraft { TicketId = ticketId, Doc = coll, DraftJson = WorkflowDraft.Empty(coll), SeenJson = WorkflowDraft.Empty(coll) }).Entity;
 
     static DraftView View(WorkflowDraft d) => new(d.Version, Items(Parse(d.DraftJson), d.Doc), Edits(d));

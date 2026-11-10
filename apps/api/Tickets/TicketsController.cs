@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AiAgentStudio.Api.Identity;
 using AiAgentStudio.Api.Services;
+using AiAgentStudio.Api.Submissions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -36,16 +37,17 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
             canReopen = responsible && t.Status == TicketStatus.Cancelled,
             canReassign = me.IsCimEngineer,
             canViewConversation = me.IsCimEngineer,
-            canChat = responsible && t.Status != TicketStatus.Cancelled,
+            canChat = responsible && t.Status == TicketStatus.Interviewing, // 送出後輸入框停用（spec 8.6）
+            canSubmit = responsible && t.Status == TicketStatus.Interviewing,
         };
     }
 
-    static object View(RequirementTicket t, UserIdentity me) => new
+    static object View(RequirementTicket t, UserIdentity me, string status) => new
     {
         id = t.Id, description = t.Description,
         cimEngineerEmpNo = t.CimEngineerEmpNo, cimEngineerName = t.CimEngineerName,
         businessUserEmpNo = t.BusinessUserEmpNo, businessUserName = t.BusinessUserName,
-        status = TicketStatus.Label(t.Status), cancelReason = t.CancelReason, createdAt = t.CreatedAt,
+        status = TicketStatus.Label(status), statusCode = status, cancelReason = t.CancelReason, createdAt = t.CreatedAt,
         permissions = PermissionsOf(t, me),
     };
 
@@ -69,7 +71,7 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
         };
         db.Tickets.Add(t);
         await db.SaveChangesAsync(ct);
-        return Created($"/api/tickets/{t.Id}", View(t, me));
+        return Created($"/api/tickets/{t.Id}", View(t, me, await StatusOf(t, ct)));
     }
 
     [HttpGet]
@@ -77,8 +79,12 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
     {
         if (await WhoAsync(ct) is not { } me) return Forbid();
         var all = await db.Tickets.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
-        return Ok(all.Select(t => View(t, me)));
+        var st = await SubmissionService.StatusesAsync(db, all, ct);
+        return Ok(all.Select(t => View(t, me, st[t.Id])));
     }
+
+    /// <summary>顯示用狀態：訪談中／已取消讀 DB，其餘由 Tool Spec 狀態推導（spec 5.2）。</summary>
+    async Task<string> StatusOf(RequirementTicket t, CancellationToken ct) => (await SubmissionService.StatusesAsync(db, [t], ct))[t.Id];
 
     void Log(RequirementTicket t, string type, UserIdentity me, string? from, string? to, string? reason) =>
         db.TicketEvents.Add(new TicketEvent { TicketId = t.Id, Type = type, ActorEmpNo = me.EmpNo, At = time.GetUtcNow(), FromValue = from, ToValue = to, Reason = reason });
@@ -100,7 +106,7 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
         t.Status = TicketStatus.Cancelled;
         t.CancelReason = req.Reason.Trim();
         await db.SaveChangesAsync(ct);
-        return Ok(View(t, me));
+        return Ok(View(t, me, await StatusOf(t, ct)));
     }
 
     /// <summary>重開：回到取消前的狀態。</summary>
@@ -118,7 +124,7 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
         t.StatusBeforeCancel = null;
         t.CancelReason = null;
         await db.SaveChangesAsync(ct);
-        return Ok(View(t, me));
+        return Ok(View(t, me, await StatusOf(t, ct)));
     }
 
     public record ReassignRequest(string? NewCimEngineerEmpNo, string? Reason);
@@ -138,7 +144,7 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
         t.CimEngineerEmpNo = target.EmpNo;
         t.CimEngineerName = target.Name;
         await db.SaveChangesAsync(ct);
-        return Ok(View(t, me));
+        return Ok(View(t, me, await StatusOf(t, ct)));
     }
 
     [HttpGet("{id}")]
@@ -146,6 +152,6 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
     {
         if (await WhoAsync(ct) is not { } me) return Forbid();
         var t = await db.Tickets.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
-        return t is null ? NotFound() : Ok(View(t, me));
+        return t is null ? NotFound() : Ok(View(t, me, await StatusOf(t, ct)));
     }
 }
