@@ -1,0 +1,5 @@
+[
+  { "EmpNo": "10000001", "Name": "陳小工", "AdId": "cim.chen", "DeptCode": "CIM100", "DeptName": "CIM 部門（假）" },
+  { "EmpNo": "10000002", "Name": "林業務", "AdId": "biz.lin", "DeptCode": "MFG200", "DeptName": "製造部門（假）" },
+  { "EmpNo": "10000003", "Name": "王無部", "AdId": "nodept.wang", "DeptCode": null, "DeptName": null }
+]
