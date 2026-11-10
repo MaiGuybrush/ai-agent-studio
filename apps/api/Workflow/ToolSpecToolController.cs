@@ -19,12 +19,15 @@ public class ToolSpecToolController(RunTokenService tokens, WorkflowDraftService
 {
     const string Doc = WorkflowDraft.ToolSpecsDoc;
 
-    /// <summary>search_tool_specs：別張單（未取消）進行中的 Tool Spec，關鍵字比對用途、預期工具名稱、系統、id。相似時由 agent 提醒 CIM Engineer。</summary>
+    /// <summary>search_tool_specs：別張單（進行中：未取消、未完成）的 Tool Spec，關鍵字比對用途、預期工具名稱、系統、id。相似時由 agent 提醒 CIM Engineer。</summary>
     [HttpGet]
     public async Task<IActionResult> Search([FromQuery] string keyword, CancellationToken ct)
     {
         if (tokens.Validate(Request.Headers["X-Run-Token"].ToString()) is not { } c) return Unauthorized();
-        var live = db.Tickets.Where(t => t.Status != TicketStatus.Cancelled).Select(t => t.Id);
+        // 「進行中」= 未取消、未完成（完成是推導狀態，要看 Tool Spec）
+        var open = await db.Tickets.AsNoTracking().Where(t => t.Status != TicketStatus.Cancelled).ToListAsync(ct);
+        var statuses = await Submissions.SubmissionService.StatusesAsync(db, open, ct);
+        var live = open.Where(t => statuses[t.Id] != TicketStatus.Completed).Select(t => t.Id).ToList();
         // ponytail: 讀出其他單的整份草稿後在記憶體比對；Tool Spec 量大時改成 DB 端的 JSONB 查詢
         var docs = await db.WorkflowDrafts.AsNoTracking().Where(d => d.Doc == Doc && d.TicketId != c.TicketId && live.Contains(d.TicketId)).ToListAsync(ct);
         bool Hit(JsonObject s) => new[] { "purpose", "expected_tool_name", "system", "id" }
@@ -39,6 +42,7 @@ public class ToolSpecToolController(RunTokenService tokens, WorkflowDraftService
     public async Task<IActionResult> Upsert(string specId, [FromBody] JsonObject body, CancellationToken ct)
     {
         if (tokens.Validate(Request.Headers["X-Run-Token"].ToString()) is not { } c) return Unauthorized();
+        if (await ToolApiGuard.RejectWriteAsync(db, c.TicketId, ct) is { } closed) return closed;
         var over = body["override_human_edit"]?.GetValue<bool>() ?? false;
         body.Remove("override_human_edit");
         if (ToolSpecRules.Validate(body, config.Current.Systems.Keys) is { } err) return BadRequest(new { message = err });
@@ -48,9 +52,10 @@ public class ToolSpecToolController(RunTokenService tokens, WorkflowDraftService
     }
 
     [HttpDelete("{specId}")]
-    public async Task<IActionResult> Delete(string specId, [FromQuery(Name = "override_human_edit")] bool over = false)
+    public async Task<IActionResult> Delete(string specId, [FromQuery(Name = "override_human_edit")] bool over = false, CancellationToken ct = default)
     {
         if (tokens.Validate(Request.Headers["X-Run-Token"].ToString()) is not { } c) return Unauthorized();
+        if (await ToolApiGuard.RejectWriteAsync(db, c.TicketId, ct) is { } closed) return closed;
         return await Reply(c, await drafts.AgentDeleteAsync(c.TicketId, c.EmpNo, specId, over, Doc), null);
     }
 

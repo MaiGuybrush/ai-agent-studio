@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { Ticket, TicketService, errorMessage } from '../../core/tickets/ticket.service';
+import { ReadOnlyView, Ticket, TicketService, errorMessage } from '../../core/tickets/ticket.service';
 
 type Mode = 'cancel' | 'reassign' | 'reopenInterview' | null;
 
@@ -51,6 +51,47 @@ type Mode = 'cancel' | 'reassign' | 'reopenInterview' | null;
             </div>
           </div>
         }
+        @if (view(); as v) {
+          <section class="mt-6 readonly-workflow">
+            <h2 class="text-lg font-bold">Workflow Definition</h2>
+            @if (v.workflow.length === 0) {
+              <p class="text-sm text-slate-500">尚未送出。</p>
+            }
+            <ol class="list-decimal ml-5 text-sm">
+              @for (s of v.workflow; track s.id) {
+                <li class="step my-1">
+                  {{ s.description }}
+                  @if (s.tool_spec) { <span class="text-slate-600">（Tool Spec：{{ s.tool_spec }}）</span> }
+                  @if (s.condition) { <span class="text-slate-600">條件：{{ s.condition }}</span> }
+                  @if (s.needs_approval) { <span class="text-amber-700">需人工核准</span> }
+                </li>
+              }
+            </ol>
+          </section>
+          <section class="mt-6 readonly-specs">
+            <h2 class="text-lg font-bold">Tool Spec</h2>
+            @if (v.toolSpecs.length === 0) {
+              <p class="text-sm text-slate-500">尚未送出。</p>
+            }
+            @for (s of v.toolSpecs; track s.specId) {
+              <div class="spec border rounded p-3 my-2 text-sm">
+                <div class="font-bold">{{ s.specId }} <span class="font-normal">{{ s.kind }}・{{ stateLabel(s.state) }}・revision {{ s.revision }}</span></div>
+                <p>用途：{{ s.content['purpose'] }}</p>
+                <p>系統：{{ s.content['system'] }}　副作用：{{ s.content['side_effect'] }}</p>
+                @if (s.content['system_owner_name']) { <p>System Owner：{{ s.content['system_owner_name'] }}（{{ s.content['system_owner'] }}）</p> }
+                @if (s.implemented; as i) { <p>實作：MCP server {{ i.serverKey }}，工具 {{ i.toolName }}</p> }
+                @if (s.acceptedCondition) { <p>已接受的條件：{{ s.acceptedCondition }}</p> }
+                <details>
+                  <summary>輸入／輸出欄位</summary>
+                  <pre class="whitespace-pre-wrap">{{ pretty({ inputs: s.content['inputs'], outputs: s.content['outputs'] }) }}</pre>
+                </details>
+                @for (r of s.reviews; track $index) {
+                  <p class="review text-slate-700">評估（revision {{ r.revision }}）：{{ r.result }}@if (r.estimatedDays) {・{{ r.estimatedDays }} 人日}@if (r.reason) {・{{ r.reason }}}@if (r.condition) {・條件：{{ r.condition }}}</p>
+                }
+              </div>
+            }
+          </section>
+        }
       }
       @if (error(); as e) {
         <p class="error text-sm text-red-600 mt-2">{{ e }}</p>
@@ -62,6 +103,7 @@ export class TicketDetailComponent {
   private readonly svc = inject(TicketService);
   private readonly id = inject(ActivatedRoute).snapshot.paramMap.get('id')!;
   readonly ticket = signal<Ticket | null>(null);
+  readonly view = signal<ReadOnlyView | null>(null);
   readonly error = signal<string | null>(null);
   readonly copied = signal(false);
   readonly mode = signal<Mode>(null);
@@ -70,6 +112,26 @@ export class TicketDetailComponent {
 
   constructor() {
     this.run(() => this.svc.get(this.id));
+    void this.loadReadOnly();
+  }
+
+  private static readonly stateLabels: Record<string, string> = {
+    Pending: '待評估', Feasible: '可行', Infeasible: '不可行', Conditional: '附條件',
+    ConditionAccepted: '已接受條件', Implementing: '實作中', Implemented: '已實作',
+  };
+  stateLabel(s: string): string {
+    return TicketDetailComponent.stateLabels[s] ?? s;
+  }
+  pretty(o: unknown): string {
+    return JSON.stringify(o, null, 2);
+  }
+  /** 唯讀區塊（所有登入者都看得到）；失敗不影響上面的操作區。 */
+  private async loadReadOnly(): Promise<void> {
+    try {
+      this.view.set(await this.svc.readOnly(this.id));
+    } catch {
+      this.view.set(null);
+    }
   }
 
   val(e: Event): string {
@@ -109,6 +171,7 @@ export class TicketDetailComponent {
     try {
       this.ticket.set(await call());
       this.mode.set(null);
+      void this.loadReadOnly();
     } catch (e) {
       this.error.set(errorMessage(e));
     }

@@ -37,7 +37,7 @@ public sealed record DraftChange(string Path, JsonNode? Before, JsonNode? After)
 
 public class WorkflowDraftService(StudioDb db, TimeProvider time)
 {
-    static readonly System.Text.Json.JsonSerializerOptions J = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }; // 存中文不轉成 XXXX
+    static readonly System.Text.Json.JsonSerializerOptions J = JsonOpts.Relaxed;
     /// <summary>系統算出的衍生欄位，不參與人工修改的 diff。</summary>
     const string DerivedKey = "naming_check";
     static JsonArray Items(JsonObject doc, string coll) => doc[coll]!.AsArray();

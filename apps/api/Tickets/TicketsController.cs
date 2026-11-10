@@ -156,6 +156,35 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
         return t is null ? NotFound() : Ok(View(t, me, await StatusOf(t, ct)));
     }
 
+    /// <summary>
+    /// 唯讀檢視（spec 3.3「其他 SSO 使用者」、§12 唯讀的需求單頁）：任何登入者都能讀需求單、最新一次送出的 Workflow Definition、
+    /// 各 Tool Spec 目前凍結的 revision 與評估結果；不含 Interview 對話，也沒有任何草稿內容（草稿只有 CIM Engineer 能讀）。
+    /// </summary>
+    [HttpGet("{id}/readonly")]
+    public async Task<IActionResult> ReadOnlyView(string id, CancellationToken ct)
+    {
+        if (await WhoAsync(ct) is not { } me) return Forbid();
+        var t = await db.Tickets.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t is null) return NotFound();
+        var sub = await db.Submissions.AsNoTracking().Where(x => x.TicketId == id).OrderByDescending(x => x.Number).FirstOrDefaultAsync(ct);
+        var recs = await db.ToolSpecRecords.AsNoTracking().Where(r => r.TicketId == id).OrderBy(r => r.SpecId).ToListAsync(ct);
+        var revs = await db.ToolSpecRevisions.AsNoTracking().Where(r => r.TicketId == id).ToListAsync(ct);
+        var reviews = await db.FeasibilityReviews.AsNoTracking().Where(r => r.TicketId == id).OrderBy(r => r.Id).ToListAsync(ct);
+        var snaps = await db.InterfaceSnapshots.AsNoTracking().Where(s => s.TicketId == id).OrderBy(s => s.Id).ToListAsync(ct);
+        return Ok(new
+        {
+            ticket = View(t, me, await StatusOf(t, ct)),
+            workflow = sub is null ? new System.Text.Json.Nodes.JsonArray() : System.Text.Json.Nodes.JsonNode.Parse(sub.WorkflowJson),
+            toolSpecs = recs.Select(r => new
+            {
+                specId = r.SpecId, kind = r.Kind, state = r.State, revision = r.CurrentRevision, acceptedCondition = r.AcceptedCondition,
+                content = System.Text.Json.Nodes.JsonNode.Parse(revs.First(v => v.SpecId == r.SpecId && v.Revision == r.CurrentRevision).ContentJson),
+                reviews = reviews.Where(v => v.SpecId == r.SpecId).Select(v => new { v.Revision, v.Result, v.Reason, v.Condition, v.EstimatedDays, v.ReviewerEmpNo, v.At }),
+                implemented = snaps.LastOrDefault(s => s.SpecId == r.SpecId && s.Revision == r.CurrentRevision) is { } s2 && r.State == ToolSpecState.Implemented ? new { s2.ServerKey, s2.ToolName } : null,
+            }),
+        });
+    }
+
     /// <summary>複製為 Markdown（spec 6.6）：已完成的單，任何可檢視者都能取；用最新一次送出的 Workflow 快照與各 Tool Spec 目前的 revision。</summary>
     [HttpGet("{id}/markdown")]
     public async Task<IActionResult> Markdown(string id, CancellationToken ct)
@@ -168,7 +197,12 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
         var recs = await db.ToolSpecRecords.AsNoTracking().Where(r => r.TicketId == id).ToListAsync(ct);
         var revs = await db.ToolSpecRevisions.AsNoTracking().Where(r => r.TicketId == id).ToListAsync(ct);
         var specs = recs.ToDictionary(r => r.SpecId, r => (System.Text.Json.Nodes.JsonObject)System.Text.Json.Nodes.JsonNode.Parse(revs.First(v => v.SpecId == r.SpecId && v.Revision == r.CurrentRevision).ContentJson)!);
-        var md = MarkdownExporter.Build(t.Id, t.Description, (System.Text.Json.Nodes.JsonArray)System.Text.Json.Nodes.JsonNode.Parse(sub.WorkflowJson)!, specs);
+        // 已實作的 Tool Spec 以 interface_snapshot 為準（只取比對目前 revision 的那筆；同一 revision 多筆取最新）
+        var snaps = (await db.InterfaceSnapshots.AsNoTracking().Where(s => s.TicketId == id).ToListAsync(ct))
+            .Where(s => recs.Any(r => r.SpecId == s.SpecId && r.CurrentRevision == s.Revision && r.State == ToolSpecState.Implemented))
+            .GroupBy(s => s.SpecId).ToDictionary(g => g.Key, g => g.OrderByDescending(s => s.Id).First());
+        var implemented = snaps.ToDictionary(p => p.Key, p => (p.Value.ServerKey, p.Value.ToolName));
+        var md = MarkdownExporter.Build(t.Id, t.Description, (System.Text.Json.Nodes.JsonArray)System.Text.Json.Nodes.JsonNode.Parse(sub.WorkflowJson)!, specs, implemented);
         return Content(md, "text/markdown; charset=utf-8");
     }
 }

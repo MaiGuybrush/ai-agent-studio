@@ -43,6 +43,7 @@ public class SubmitInterviewTests : IDisposable
             b.ConfigureServices(s =>
             {
                 s.RemoveAll<StudioConfigProvider>(); s.AddSingleton(new StudioConfigProvider(path, _ => "k"));
+                s.RemoveAll<IMcpTransportFactory>(); s.AddSingleton<IMcpTransportFactory>(McpToolCatalogTests.GwFactory());
                 s.RemoveAll<IVocabularySource>(); s.AddSingleton<IVocabularySource>(src);
                 s.RemoveAll<IVocabularyAlert>(); s.AddSingleton<IVocabularyAlert>(new FakeAlert());
                 s.RemoveAll<IVocabularyProposalClient>(); s.AddSingleton<IVocabularyProposalClient>(new FakeProposals());
@@ -54,7 +55,7 @@ public class SubmitInterviewTests : IDisposable
 
     async Task<Factory> Make()
     {
-        File.WriteAllText(path, """{ "mcpServers": {}, "systems": { "MES": "10000001", "ERP": "10000002" } }""");
+        File.WriteAllText(path, """{ "mcpServers": { "gw": { "type": "http", "url": "http://gw/mcp" } }, "systems": { "MES": "10000001", "ERP": "10000002" } }""");
         var f = new Factory(path, src, time, mailDir);
         f.Names["10000001"] = "MES 負責人"; f.Names["10000002"] = "ERP 負責人";
         await f.Seed();
@@ -77,6 +78,7 @@ public class SubmitInterviewTests : IDisposable
     {
         ["kind"] = kind, ["purpose"] = "查工單", ["system"] = system, ["side_effect"] = "read",
         ["system_owner"] = kind == "Reuse" ? null : owner,
+        ["ref"] = kind is "Reuse" or "Extend" ? new { server = "gw", tool = "get_order" } : null, // §6.2：Reuse／Extend 必填 ref
         ["inputs"] = inputs ?? new { type = "object", properties = new { eqptId = new { type = "string" } } },
         ["outputs"] = new { type = "object", properties = new { status = new { type = "string" } } },
     };
@@ -352,7 +354,7 @@ public class SubmitInterviewTests : IDisposable
         using var f = await Make();
         await Upsert(Agent(f), "ts1", Spec("Reuse"));
         await Submit(f.As("CIM1"));
-        Assert.Empty(Outbox(f));
+        Assert.DoesNotContain(Outbox(f), e => e.EventType is EmailEvents.Submitted or EmailEvents.Resubmitted); // 沒有人要評估；只有完成通知（見 ReviewFixTests）
 
         using var g = await Make();
         await Upsert(Agent(g), "ts1", Spec(owner: null));

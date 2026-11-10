@@ -62,7 +62,7 @@ public class InterviewController(ICurrentUserService user, IdentityService ident
             ["reopen_reason"] = reason, ["submission_number"] = sub.Number,
             ["workflow"] = JsonNode.Parse(sub.WorkflowJson), ["tool_specs"] = specs,
         };
-        db.Interviews.Add(new Interview { TicketId = ticketId, ReopenReason = reason, OpeningContext = context.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }), CreatedAt = time.GetUtcNow() });
+        db.Interviews.Add(new Interview { TicketId = ticketId, ReopenReason = reason, OpeningContext = context.ToJsonString(JsonOpts.Relaxed), CreatedAt = time.GetUtcNow() });
         db.TicketEvents.Add(new TicketEvent { TicketId = ticketId, Type = "ReopenInterview", ActorEmpNo = me.EmpNo, At = time.GetUtcNow(), FromValue = t.Status, ToValue = TicketStatus.Interviewing, Reason = reason });
         t.Status = TicketStatus.Interviewing;
         await db.SaveChangesAsync(ct);

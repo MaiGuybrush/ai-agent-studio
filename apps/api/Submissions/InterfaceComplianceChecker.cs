@@ -1,3 +1,4 @@
+using AiAgentStudio.Api.Workflow;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
@@ -24,7 +25,7 @@ public static class InterfaceComplianceChecker
     {
         var failures = new List<string>();
         var warnings = new List<string>();
-        var extend = kind == "Extend";
+        var extend = kind == ToolSpecKinds.Extend;
 
         void Walk(JsonNode? spec, JsonNode? actual, string path, bool isInput)
         {

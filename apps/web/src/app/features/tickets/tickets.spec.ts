@@ -118,6 +118,30 @@ describe('TicketDetailComponent', () => {
     expect(el(fx).querySelector('button.copy-md')!.textContent).toContain('已複製');
   });
 
+  it('shows the read-only workflow, tool specs and review results from the backend', async () => {
+    setup({
+      get: () => Promise.resolve(ticket()),
+      readOnly: () => Promise.resolve({
+        ticket: ticket(),
+        workflow: [{ id: 's1', description: '查工單', tool_spec: 'ts1' }],
+        toolSpecs: [{
+          specId: 'ts1', kind: 'New', state: 'Feasible', revision: 1, acceptedCondition: null,
+          content: { purpose: '查工單用途', system: 'MES', side_effect: 'read', inputs: {}, outputs: {} },
+          reviews: [{ revision: 1, result: 'Feasible', reason: null, condition: null, estimatedDays: 2, reviewerEmpNo: 'O1', at: '2026-01-02T00:00:00Z' }],
+          implemented: null,
+        }],
+      }),
+    });
+    const fx = TestBed.createComponent(TicketDetailComponent);
+    await flush(fx);
+    await flush(fx);
+    expect(el(fx).querySelector('.readonly-workflow .step')!.textContent).toContain('查工單');
+    const spec = el(fx).querySelector('.readonly-specs .spec')!.textContent!;
+    expect(spec).toContain('查工單用途');
+    expect(spec).toContain('可行');
+    expect(el(fx).querySelector('.review')!.textContent).toContain('2 人日');
+  });
+
   it('no copy button before completion', async () => {
     setup({ get: () => Promise.resolve(ticket()) });
     const fx = TestBed.createComponent(TicketDetailComponent);

@@ -1,4 +1,5 @@
 using System;
+using AiAgentStudio.Api.Workflow;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
@@ -64,7 +65,7 @@ public class SpecCommentsController(ICurrentUserService user, IdentityService id
         if (user.EmpNo is not { } me) return (null, Forbid());
         var t = await db.Tickets.AsNoTracking().FirstOrDefaultAsync(x => x.Id == ticketId, ct);
         var rec = await db.ToolSpecRecords.FirstOrDefaultAsync(r => r.TicketId == ticketId && r.SpecId == specId, ct);
-        if (t is null || rec is null || rec.Kind == "Reuse") return (null, NotFound());
+        if (t is null || rec is null || rec.Kind == ToolSpecKinds.Reuse) return (null, NotFound());
         var rev = await db.ToolSpecRevisions.AsNoTracking().FirstAsync(r => r.TicketId == ticketId && r.SpecId == specId && r.Revision == rec.CurrentRevision, ct);
         var owner = SpecOwner.Resolve(rev.ContentJson, rec.CurrentRevision, await db.ReviewAssignments.AsNoTracking().Where(a => a.TicketId == ticketId && a.SpecId == specId).ToListAsync(ct));
         var jwt = Request.Headers.Authorization.ToString()["Bearer ".Length..].Trim();
