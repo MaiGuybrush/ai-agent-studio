@@ -20,6 +20,9 @@ type Mode = 'cancel' | 'reassign' | null;
           <p class="text-sm text-red-700 mt-1">取消原因：{{ t.cancelReason }}</p>
         }
         <div class="flex gap-2 mt-4">
+          @if (t.statusCode === 'Completed') {
+            <button class="copy-md border rounded px-3 py-1" (click)="copyMarkdown()">{{ copied() ? '已複製' : '複製為 Markdown' }}</button>
+          }
           @if (t.permissions.canViewConversation) {
             <a class="interview px-3 py-1 rounded bg-blue-600 text-white" [routerLink]="['/tickets', t.id, 'interview']">開啟 Interview</a>
           }
@@ -57,6 +60,7 @@ export class TicketDetailComponent {
   private readonly id = inject(ActivatedRoute).snapshot.paramMap.get('id')!;
   readonly ticket = signal<Ticket | null>(null);
   readonly error = signal<string | null>(null);
+  readonly copied = signal(false);
   readonly mode = signal<Mode>(null);
   readonly reason = signal('');
   readonly empNo = signal('');
@@ -80,6 +84,16 @@ export class TicketDetailComponent {
     const reason = this.reason().trim();
     if (this.mode() === 'cancel') this.run(() => this.svc.cancel(this.id, reason));
     else this.run(() => this.svc.reassign(this.id, this.empNo().trim(), reason));
+  }
+  /** Markdown 由後端產生，這裡只負責寫入剪貼簿（v1 不提供下載）。 */
+  async copyMarkdown(): Promise<void> {
+    this.error.set(null);
+    try {
+      await navigator.clipboard.writeText(await this.svc.markdown(this.id));
+      this.copied.set(true);
+    } catch (e) {
+      this.error.set(errorMessage(e, '複製失敗，請稍後再試。'));
+    }
   }
   reopen(): void {
     this.run(() => this.svc.reopen(this.id));

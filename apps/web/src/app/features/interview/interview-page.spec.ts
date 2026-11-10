@@ -7,7 +7,7 @@ import { InterviewPageComponent } from './interview-page.component';
 
 const ticket = (canChat: boolean, o: Partial<Ticket> = {}): Ticket => ({
   id: 'T-1', description: '換線通知需求', cimEngineerEmpNo: 'E1', cimEngineerName: '王工',
-  businessUserEmpNo: 'B1', businessUserName: '陳業', status: '訪談中', cancelReason: null,
+  businessUserEmpNo: 'B1', businessUserName: '陳業', status: '訪談中', statusCode: 'Interviewing', cancelReason: null,
   createdAt: '2026-01-01T00:00:00Z',
   permissions: { canCancel: canChat, canReopen: false, canReassign: true, canViewConversation: true, canChat, canSubmit: canChat },
   ...o,

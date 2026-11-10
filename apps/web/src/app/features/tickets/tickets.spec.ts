@@ -11,7 +11,7 @@ const none: TicketPermissions = {
 function ticket(p: Partial<TicketPermissions> = {}, o: Partial<Ticket> = {}): Ticket {
   return {
     id: 'T-1', description: '換線通知', cimEngineerEmpNo: 'E1', cimEngineerName: '王工',
-    businessUserEmpNo: 'B1', businessUserName: '陳業', status: '訪談中', cancelReason: null,
+    businessUserEmpNo: 'B1', businessUserName: '陳業', status: '訪談中', statusCode: 'Interviewing', cancelReason: null,
     createdAt: '2026-01-01T00:00:00Z', permissions: { ...none, ...p }, ...o,
   };
 }
@@ -101,6 +101,28 @@ describe('TicketDetailComponent', () => {
     expect(el(fx).textContent).toContain('王工');
     expect(buttons(fx)).toEqual(['cancel', 'reassign']);
     expect(el(fx).querySelector('a.interview')!.getAttribute('href')).toBe('/tickets/T-1/interview');
+  });
+
+  it('completed ticket offers copy-as-markdown to everyone and writes to the clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setup({
+      get: () => Promise.resolve(ticket({}, { status: '已完成', statusCode: 'Completed' })),
+      markdown: () => Promise.resolve('# md'),
+    });
+    const fx = TestBed.createComponent(TicketDetailComponent);
+    await flush(fx);
+    click(el(fx), 'button.copy-md');
+    await flush(fx);
+    expect(writeText).toHaveBeenCalledWith('# md');
+    expect(el(fx).querySelector('button.copy-md')!.textContent).toContain('已複製');
+  });
+
+  it('no copy button before completion', async () => {
+    setup({ get: () => Promise.resolve(ticket()) });
+    const fx = TestBed.createComponent(TicketDetailComponent);
+    await flush(fx);
+    expect(el(fx).querySelector('button.copy-md')).toBeNull();
   });
 
   it('read-only viewer sees no actions and no interview link', async () => {

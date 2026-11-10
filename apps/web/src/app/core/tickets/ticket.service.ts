@@ -21,6 +21,7 @@ export interface Ticket {
   businessUserEmpNo: string;
   businessUserName: string;
   status: string;
+  statusCode: string;
   cancelReason: string | null;
   createdAt: string;
   permissions: TicketPermissions;
@@ -56,6 +57,9 @@ export class TicketService {
   }
   get(id: string): Promise<Ticket> {
     return firstValueFrom(this.http.get<Ticket>(this.url(this.id(id))));
+  }
+  markdown(id: string): Promise<string> {
+    return firstValueFrom(this.http.get(this.url(`${this.id(id)}/markdown`), { responseType: 'text' }));
   }
   create(body: CreateTicket): Promise<Ticket> {
     return firstValueFrom(this.http.post<Ticket>(this.url(), body));
