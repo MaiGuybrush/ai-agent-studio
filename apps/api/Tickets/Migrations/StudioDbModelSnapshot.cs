@@ -188,6 +188,49 @@ namespace AiAgentStudio.Api.Tickets.Migrations
                     b.ToTable("feasibility_review", (string)null);
                 });
 
+            modelBuilder.Entity("AiAgentStudio.Api.Submissions.InterfaceSnapshot", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CheckedByEmpNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InputSchemaJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("OutputSchemaJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ServerKey")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SpecId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TicketId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ToolName")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId", "SpecId");
+
+                    b.ToTable("interface_snapshot", (string)null);
+                });
+
             modelBuilder.Entity("AiAgentStudio.Api.Submissions.ReviewAssignment", b =>
                 {
                     b.Property<long>("Id")

@@ -67,6 +67,22 @@ public class ToolSpecRecord
     public string? AcceptedCondition { get; set; }
 }
 
+/// <summary>interface_snapshot（spec 6.4、13）：Interface Compliance Check 通過時的實際介面。已實作的 Tool Spec 以此為準，不再重檢 Naming Check。</summary>
+public class InterfaceSnapshot
+{
+    public long Id { get; set; }
+    public string TicketId { get; set; } = "";
+    public string SpecId { get; set; } = "";
+    /// <summary>通過檢查時比對的 Tool Spec revision。</summary>
+    public int Revision { get; set; }
+    public string ServerKey { get; set; } = "";
+    public string ToolName { get; set; } = "";
+    public string InputSchemaJson { get; set; } = "{}";
+    public string? OutputSchemaJson { get; set; }
+    public string CheckedByEmpNo { get; set; } = "";
+    public DateTimeOffset At { get; set; }
+}
+
 /// <summary>feasibility_review（spec 13）：綁定 revision 的回覆；每次回覆或修改新增一筆，保留歷史。</summary>
 public class FeasibilityReview
 {

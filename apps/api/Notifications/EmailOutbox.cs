@@ -40,6 +40,7 @@ public static class EmailEvents
     public const string Resubmitted = "Resubmitted"; // 重評 → System Owner
     public const string Replied = "Replied";         // 回覆評估結果 → CIM Engineer
     public const string Commented = "Commented";     // 有新留言 → 對方（CIM Engineer 或 System Owner）
+    public const string Completed = "Completed";     // 全部 Tool Spec 已實作，需求單已完成 → Business User 與 CIM Engineer
     public const string OwnerReassigned = "OwnerReassigned"; // 轉派／改派 System Owner → 新的 System Owner
 }
 

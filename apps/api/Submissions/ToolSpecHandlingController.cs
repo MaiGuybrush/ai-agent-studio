@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -8,6 +9,7 @@ using AiAgentStudio.Api.Notifications;
 using AiAgentStudio.Api.Services;
 using AiAgentStudio.Api.Studio;
 using AiAgentStudio.Api.Tickets;
+using AiAgentStudio.Api.Vocabulary;
 using AiAgentStudio.Api.Workflow;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,7 +24,7 @@ namespace AiAgentStudio.Api.Submissions;
 [ApiController]
 [Route("api/tickets/{ticketId}/specs/{specId}")]
 [Authorize]
-public class ToolSpecHandlingController(ICurrentUserService user, IdentityService identity, StudioDb db, WorkflowDraftService drafts, StudioConfigProvider config, IUserDirectory directory, TimeProvider time) : ControllerBase
+public class ToolSpecHandlingController(ICurrentUserService user, IdentityService identity, StudioDb db, WorkflowDraftService drafts, StudioConfigProvider config, IUserDirectory directory, TimeProvider time, McpToolCatalog mcp, VocabularyService vocab, PendingTermService pendingTerms) : ControllerBase
 {
     static readonly System.Text.Json.JsonSerializerOptions J = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
@@ -138,5 +140,65 @@ public class ToolSpecHandlingController(ICurrentUserService user, IdentityServic
         rec.State = ToolSpecState.Implementing; rec.Handled = true;
         await db.SaveChangesAsync(ct);
         return Ok(new { specId, state = rec.State });
+    }
+
+    public sealed record ImplementedRequest(string? ServerKey, string? ToolName);
+
+    /// <summary>
+    /// 標為已實作（spec 5.3 第 7–8 點、6.4）：取得實際 MCP 工具介面並做 Interface Compliance Check。
+    /// 沒通過回 200 + passed=false（附 failures），狀態不變；通過才存 interface_snapshot、標為已實作、寫事件。
+    /// 若這是最後一份未實作的 Tool Spec，需求單隨之為已完成，同一次 SaveChanges 排入 email（Business User 與 CIM Engineer）。
+    /// </summary>
+    [HttpPost("implemented")]
+    public async Task<IActionResult> MarkImplemented(string ticketId, string specId, [FromBody] ImplementedRequest body, CancellationToken ct)
+    {
+        var (ctx, err) = await LoadAsync(ticketId, specId, ct);
+        if (ctx is not var (t, rec, me)) return err!;
+        if (rec.State != ToolSpecState.Implementing) return Problem("只有實作中的 Tool Spec 可以標為已實作。", statusCode: 409);
+        if (string.IsNullOrWhiteSpace(body.ServerKey) || string.IsNullOrWhiteSpace(body.ToolName)) return Problem("需提供 serverKey 與 toolName。", statusCode: 400);
+
+        var failures = new System.Collections.Generic.List<string>();
+        var warnings = new System.Collections.Generic.List<string>();
+        var server = (await mcp.ListAsync(ct)).FirstOrDefault(s => s.Server == body.ServerKey);
+        if (server is null) failures.Add($"找不到 MCP server '{body.ServerKey}'。");
+        else if (server.Error is not null) failures.Add($"無法連線 MCP server '{body.ServerKey}'：{server.Error}");
+        var tool = server?.Tools.FirstOrDefault(x => x.Name == body.ToolName);
+        if (server is { Error: null } && tool is null) failures.Add($"MCP server '{body.ServerKey}' 沒有工具 '{body.ToolName}'。");
+
+        if (tool is not null)
+        {
+            var spec = JsonNode.Parse((await db.ToolSpecRevisions.AsNoTracking().FirstAsync(r => r.TicketId == ticketId && r.SpecId == specId && r.Revision == rec.CurrentRevision, ct)).ContentJson)!;
+            IReadOnlyList<GlossaryEntry>? entries = null; IReadOnlyCollection<string>? pending = null;
+            try
+            {
+                entries = (await vocab.GetAsync(ct)).Entries;
+                pending = (await pendingTerms.ActiveAsync(entries, ct)).Select(x => x.Term).ToList();
+            }
+            catch (VocabularyException e) { warnings.Add(ToolSpecNaming.NoCache(e.Message)); }
+            var result = InterfaceComplianceChecker.Check(rec.Kind, spec["inputs"], spec["outputs"],
+                JsonNode.Parse(tool.InputSchema.GetRawText()), tool.OutputSchema is { } o ? JsonNode.Parse(o.GetRawText()) : null, entries, pending);
+            failures.AddRange(result.Failures); warnings.AddRange(result.Warnings);
+        }
+        if (failures.Count > 0 || tool is null) return Ok(new { specId, passed = false, failures, warnings });
+
+        var now = time.GetUtcNow();
+        db.InterfaceSnapshots.Add(new InterfaceSnapshot
+        {
+            TicketId = ticketId, SpecId = specId, Revision = rec.CurrentRevision, ServerKey = body.ServerKey!, ToolName = body.ToolName!,
+            InputSchemaJson = tool.InputSchema.GetRawText(), OutputSchemaJson = tool.OutputSchema?.GetRawText(), CheckedByEmpNo = me, At = now,
+        });
+        Log(ticketId, me, "ToolSpecImplemented", specId, rec.State, ToolSpecState.Implemented);
+        rec.State = ToolSpecState.Implemented; rec.Handled = true;
+        var states = await db.ToolSpecRecords.Where(r => r.TicketId == ticketId && r.SpecId != specId).Select(r => r.State).ToListAsync(ct);
+        states.Add(rec.State);
+        var completed = TicketStatusDeriver.Derive(t.Status, states) == TicketStatus.Completed;
+        if (completed)
+        {
+            var ids = await db.ToolSpecRecords.Where(r => r.TicketId == ticketId).Select(r => r.SpecId).ToListAsync(ct);
+            foreach (var who in new[] { t.BusinessUserEmpNo, t.CimEngineerEmpNo }.Distinct())
+                EmailOutbox.Queue(db, EmailEvents.Completed, who, ticketId, new { specs = ids }, now);
+        }
+        await db.SaveChangesAsync(ct);
+        return Ok(new { specId, passed = true, state = rec.State, completed, failures, warnings });
     }
 }

@@ -65,6 +65,7 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
 
     public DbSet<AiAgentStudio.Api.Submissions.ToolSpecComment> ToolSpecComments => Set<AiAgentStudio.Api.Submissions.ToolSpecComment>();
     public DbSet<AiAgentStudio.Api.Submissions.ReviewAssignment> ReviewAssignments => Set<AiAgentStudio.Api.Submissions.ReviewAssignment>();
+    public DbSet<AiAgentStudio.Api.Submissions.InterfaceSnapshot> InterfaceSnapshots => Set<AiAgentStudio.Api.Submissions.InterfaceSnapshot>();
     public DbSet<AiAgentStudio.Api.Notifications.EmailOutbox> EmailOutbox => Set<AiAgentStudio.Api.Notifications.EmailOutbox>();
 
     /// <summary>啟動時清除遺留的「執行中」標記（spec 2.4）；回傳清除筆數。</summary>
@@ -141,6 +142,14 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
             e.ToTable("review_assignment");
             e.HasIndex(x => new { x.TicketId, x.SpecId });
             e.Property(x => x.TicketId).HasMaxLength(64);
+        });
+        b.Entity<AiAgentStudio.Api.Submissions.InterfaceSnapshot>(e =>
+        {
+            e.ToTable("interface_snapshot");
+            e.HasIndex(x => new { x.TicketId, x.SpecId });
+            e.Property(x => x.TicketId).HasMaxLength(64);
+            e.Property(x => x.InputSchemaJson).HasColumnType("jsonb");
+            e.Property(x => x.OutputSchemaJson).HasColumnType("jsonb");
         });
         b.Entity<AiAgentStudio.Api.Notifications.EmailOutbox>(e =>
         {
