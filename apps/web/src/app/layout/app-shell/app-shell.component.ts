@@ -18,6 +18,11 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
     route: '/tickets',
     icon: 'tickets',
   },
+  {
+    label: '待我評估 / Reviews',
+    route: '/reviews',
+    icon: 'tickets',
+  },
 ];
 
 @Component({
