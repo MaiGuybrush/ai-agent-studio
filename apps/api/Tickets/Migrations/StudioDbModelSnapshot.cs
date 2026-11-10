@@ -145,6 +145,49 @@ namespace AiAgentStudio.Api.Tickets.Migrations
                     b.ToTable("email_outbox", (string)null);
                 });
 
+            modelBuilder.Entity("AiAgentStudio.Api.Submissions.FeasibilityReview", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Condition")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("EstimatedDays")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Result")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReviewerEmpNo")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SpecId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TicketId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId", "SpecId", "Revision");
+
+                    b.ToTable("feasibility_review", (string)null);
+                });
+
             modelBuilder.Entity("AiAgentStudio.Api.Submissions.Submission", b =>
                 {
                     b.Property<long>("Id")
@@ -187,6 +230,9 @@ namespace AiAgentStudio.Api.Tickets.Migrations
 
                     b.Property<int>("CurrentRevision")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("Handled")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Kind")
                         .HasColumnType("text");
