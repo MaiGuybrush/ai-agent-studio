@@ -72,6 +72,37 @@ public class InterviewRunTests
         await Task.CompletedTask;
     }
 
+    static async IAsyncEnumerable<AgentEvent> CutOff()
+    {
+        yield return FakeAgent.Ev("text", new { text = "半句" });
+        await Task.CompletedTask; // 沒有 done／error 就結束 = 連線中斷
+    }
+
+    static async IAsyncEnumerable<AgentEvent> Crash()
+    {
+        yield return FakeAgent.Ev("text", new { text = "半句" });
+        await Task.CompletedTask;
+        throw new HttpRequestException("connection reset");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Lost_connection_to_python_marks_run_as_error_with_unknown_usage(bool throws)
+    {
+        using var f = new InterviewFactory(); await f.Seed();
+        f.Agent.Script = (_, _) => throws ? Crash() : CutOff();
+        var events = await Sse.Read(await f.Send("CIM1", "q"));
+        Assert.Equal("error", events[^1].Type);
+
+        var r = Assert.Single(f.Runs());
+        Assert.Equal("錯誤", r.Result);
+        Assert.Null(r.InputTokens); Assert.Null(r.OutputTokens); Assert.Null(r.Requests); // 沒收到最後事件：用量未知
+        Assert.Equal(1, (await f.Conversation("CIM1")).GetProperty("messages").GetArrayLength()); // 回覆捨棄
+        f.Agent.Script = (_, a) => a.Reply("好了");
+        Assert.Equal(["text", "done"], (await Sse.Read(await f.Send("CIM1", null))).Select(e => e.Type)); // 可重試
+    }
+
     [Fact]
     public async Task Cancel_stops_run_and_asks_python_to_cancel()
     {
@@ -129,6 +160,21 @@ public class InterviewRunTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await anon.SendAsync(Req(tokens.Issue("T-1", "CIM1")[..^2] + "xx"))).StatusCode);
         // 一般使用者 JWT 不能當 run token 用
         Assert.Equal(HttpStatusCode.Unauthorized, (await anon.SendAsync(Req(TicketFactory.Token("CIM1")))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Startup_clears_stale_running_flags_so_interview_accepts_messages_again()
+    {
+        using var f = new InterviewFactory(); await f.Seed();
+        await Sse.Read(await f.Send("CIM1", "先建立 Interview"));
+        using (var s = f.Services.CreateScope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AiAgentStudio.Api.Tickets.StudioDb>();
+            db.Interviews.Single().IsRunning = true; // 模擬 C# 當掉遺留的標記
+            db.SaveChanges();
+            Assert.Equal(1, db.ClearStaleRunning());
+        }
+        Assert.Equal(HttpStatusCode.OK, (await f.Send("CIM1", "q")).StatusCode);
     }
 
     class Clock : TimeProvider { public DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero); public override DateTimeOffset GetUtcNow() => Now; }

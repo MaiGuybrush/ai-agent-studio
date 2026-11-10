@@ -36,9 +36,7 @@ if (!app.Environment.IsEnvironment("Testing"))
     using var scope = app.Services.CreateScope();
     var studio = scope.ServiceProvider.GetRequiredService<AiAgentStudio.Api.Tickets.StudioDb>();
     studio.Database.Migrate();
-    // 啟動時清除遺留的「執行中」標記（spec 2.4）
-    foreach (var iv in studio.Interviews.Where(x => x.IsRunning)) iv.IsRunning = false;
-    studio.SaveChanges();
+    studio.ClearStaleRunning();
 }
 
 // Swagger 配置
