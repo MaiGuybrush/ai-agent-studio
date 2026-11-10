@@ -74,6 +74,7 @@ def create_app(model: Model | None = None, api_key: str | None = None) -> FastAP
                         await q.put(sse("text", {"text": delta}))
                     u = result.usage
                     await q.put(sse("done", {
+                        "model": model.model_name,
                         "messages": json.loads(result.new_messages_json()),
                         "usage": {"requests": u.requests, "input_tokens": u.input_tokens, "output_tokens": u.output_tokens},
                     }))

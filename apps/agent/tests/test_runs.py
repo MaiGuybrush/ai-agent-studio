@@ -52,6 +52,7 @@ def test_run_streams_text_then_done_with_new_messages_and_usage():
     assert last_ev == "done"
     # 只回本次新增的 messages：agent 的回覆（user 訊息 C# 已經存了）
     assert [m["kind"] for m in last["messages"]] == ["response"]
+    assert last["model"] == "test"
     assert last["usage"]["requests"] == 1
     assert last["usage"]["input_tokens"] > 0
 

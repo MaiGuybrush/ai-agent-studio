@@ -112,6 +112,7 @@ public class InterviewController(ICurrentUserService user, IdentityService ident
         Response.Headers["X-Accel-Buffering"] = "no";
         try
         {
+            await Response.Body.FlushAsync(ct); // 先送出標頭，讓重連的一方立刻知道連上了
             await foreach (var e in run.Stream(afterId, ct))
             {
                 await Response.WriteAsync($"id: {e.Id}\nevent: {e.Type}\ndata: {e.Data}\n\n", Encoding.UTF8, ct);
