@@ -8,7 +8,15 @@ public static class TicketStatus
 {
     public const string Interviewing = "Interviewing"; // 訪談中
     public const string Cancelled = "Cancelled";       // 已取消
-    public static string Label(string s) => s == Cancelled ? "已取消" : "訪談中";
+    /// <summary>已送出：只是「不在訪談中」的標記，顯示用的狀態由 Tool Spec 推導（<c>TicketStatusDeriver</c>）。</summary>
+    public const string Submitted = "Submitted";
+    public const string Evaluating = "Evaluating";     // 評估中（推導）
+    public const string Implementing = "Implementing"; // 實作中（推導）
+    public const string Completed = "Completed";       // 已完成（推導）
+    public static string Label(string s) => s switch
+    {
+        Cancelled => "已取消", Evaluating => "評估中", Implementing => "實作中", Completed => "已完成", _ => "訪談中",
+    };
 }
 
 /// <summary>需求單（spec 13）。只存人觸發的狀態；其餘狀態之後由 Tool Spec 推導。</summary>
