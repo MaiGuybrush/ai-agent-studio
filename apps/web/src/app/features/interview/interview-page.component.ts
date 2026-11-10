@@ -122,11 +122,29 @@ const MAX_RECONNECT = 5;
                     <textarea class="w-full border rounded p-1" [class]="'f-' + f.key" [class.human]="humanSpec(sp.id, f.key)" [disabled]="!canChat()"
                       [value]="specText(sp, f.key)" (input)="editSpec(sp.id, f.key, val($event))"></textarea></label>
                 }
+                @for (n of namingRows(sp); track n.path) {
+                  <div class="naming-row text-xs" [class]="'naming-' + n.status">
+                    <code>{{ n.path }}</code>
+                    @switch (n.status) {
+                      @case ('pass') { <span class="text-green-700">通過</span> }
+                      @case ('rename') {
+                        <span class="text-amber-700">建議改名 → <b>{{ n.suggestion }}</b></span>
+                        @if (canChat()) { <button class="apply-rename border rounded px-1 ml-1" (click)="applyRename(sp.id, n.path, n.suggestion!)">改成標準名</button> }
+                      }
+                      @default { <span class="text-blue-700">新名詞（待 CIM Engineer 確認）</span> }
+                    }
+                  </div>
+                }
                 <div class="text-xs text-slate-500">輸入：{{ json(sp.inputs) }}　輸出：{{ json(sp.outputs) }}</div>
               </div>
             } @empty {
               <p class="text-sm text-slate-500">尚無 Tool Spec；agent 會在訪談中逐份建立。</p>
             }
+            @if (vocab(); as v) {
+              <p class="vocab-info text-xs text-slate-500">詞彙版本 {{ v.sha.slice(0, 7) }}（{{ v.fetchedAt }}）</p>
+              @if (v.warning) { <p class="vocab-warning text-xs text-amber-700">{{ v.warning }}</p> }
+            }
+            @if (vocabError(); as ve) { <p class="vocab-error text-sm text-red-600">{{ ve }}</p> }
             @if (specError(); as se) { <p class="spec-error text-sm text-red-600">{{ se }}</p> }
             @if (canChat()) {
               <button class="save-specs border rounded px-2 mt-2 bg-blue-600 text-white" [disabled]="!specsDirty()" (click)="saveSpecs()">儲存 Tool Spec</button>
@@ -159,6 +177,8 @@ export class InterviewPageComponent {
   readonly specs = signal<ToolSpec[]>([]);
   readonly specsDirty = signal(false);
   readonly specError = signal<string | null>(null);
+  readonly vocab = signal<ToolSpecDraft['vocabulary']>(null);
+  readonly vocabError = signal<string | null>(null);
   private specDraft: ToolSpecDraft | null = null;
   /** 畫面上可直接編輯的文字欄位；inputs／outputs 等結構化欄位目前只顯示，修改請對 agent 說。 */
   readonly specFields = [
@@ -199,6 +219,29 @@ export class InterviewPageComponent {
     this.specs.update((l) => l.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
     this.specsDirty.set(true);
   }
+  namingRows(sp: ToolSpec): { path: string; status: string; suggestion?: string }[] {
+    return Object.entries(sp.naming_check?.fields ?? {}).map(([path, r]) => ({ path, ...r }));
+  }
+  /** 一鍵改成標準名：沿欄位路徑（inputs.lots[].state）找到該層 properties，原地換 key（順序與 required 一併處理）；結果在儲存後由後端重跑。 */
+  applyRename(id: string, path: string, to: string): void {
+    this.specs.update((l) => l.map((s) => {
+      if (s.id !== id) return s;
+      const copy = structuredClone(s) as unknown as Record<string, any>;
+      const [root, ...tokens] = path.split('.');
+      let node = copy[root];
+      for (const t of tokens.slice(0, -1)) {
+        node = node?.properties?.[t.replace(/\[\]$/, '')];
+        if (t.endsWith('[]')) node = node?.items;
+      }
+      const from = tokens[tokens.length - 1];
+      if (!node?.properties || !(from in node.properties)) return s;
+      node.properties = Object.fromEntries(Object.entries(node.properties).map(([k, v]) => [k === from ? to : k, v]));
+      if (Array.isArray(node.required)) node.required = node.required.map((k: string) => (k === from ? to : k));
+      delete copy['naming_check']; // 路徑已變，舊結果作廢
+      return copy as unknown as ToolSpec;
+    }));
+    this.specsDirty.set(true);
+  }
   removeSpec(id: string): void {
     this.specs.update((l) => l.filter((s) => s.id !== id));
     this.specsDirty.set(true);
@@ -208,6 +251,8 @@ export class InterviewPageComponent {
       const d = await this.interview.toolSpecDraft(this.id);
       this.specDraft = d;
       this.specs.set(structuredClone(d.steps));
+      this.vocab.set(d.vocabulary ?? null);
+      this.vocabError.set(d.vocabularyError ?? null);
       this.specsDirty.set(false);
     } catch { /* 載入失敗不影響對話 */ }
   }
@@ -217,6 +262,8 @@ export class InterviewPageComponent {
       const d = await this.interview.saveToolSpecDraft(this.id, this.specDraft!.version, this.specs());
       this.specDraft = d;
       this.specs.set(structuredClone(d.steps));
+      this.vocab.set(d.vocabulary ?? null);
+      this.vocabError.set(d.vocabularyError ?? null);
       this.specsDirty.set(false);
     } catch (e) {
       if ((e as { status?: number }).status === 409) {

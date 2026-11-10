@@ -257,4 +257,43 @@ describe('InterviewPageComponent', () => {
     await settle();
     expect(svc.saveToolSpecDraft).toHaveBeenCalledWith('T-1', 2, [{ id: 'ts1', kind: 'New', purpose: '查工單狀態', system: 'MES' }]);
   });
+
+  it('shows Naming Check status per field (nested too) and one-click renames to the standard name', async () => {
+    const { fx, root, svc, specs, settle } = setup({ ticket: ticket(true) });
+    specs.current = {
+      version: 2, humanEdits: [], missing: {},
+      vocabulary: { sha: 'abcdef1234567890', fetchedAt: '2026-11-10T08:00:00Z', warning: '詞彙更新失敗，沿用 abcdef1234567890' },
+      steps: [{
+        id: 'ts1', kind: 'New',
+        inputs: { type: 'object', properties: { equipmentId: { type: 'string' }, detail: { type: 'object', properties: { state: { type: 'string' } } } } },
+        naming_check: {
+          sha: 'abcdef1234567890',
+          fields: {
+            'inputs.equipmentId': { status: 'rename', suggestion: 'eqptId' },
+            'inputs.detail': { status: 'new' },
+            'inputs.detail.state': { status: 'rename', suggestion: 'status' },
+          },
+        },
+      }],
+    };
+    fx.detectChanges(); await settle();
+    (root.querySelectorAll('.col-right .tab')[1] as HTMLElement).click();
+    fx.detectChanges(); await settle();
+    const rows = Array.from(root.querySelectorAll('.naming-row')).map((r) => r.textContent!.replace(/\s+/g, ' ').trim());
+    expect(rows[0]).toContain('inputs.equipmentId'); expect(rows[0]).toContain('建議改名'); expect(rows[0]).toContain('eqptId');
+    expect(rows[1]).toContain('新名詞');
+    expect(rows[2]).toContain('inputs.detail.state');
+    expect(root.querySelector('.vocab-info')!.textContent).toContain('abcdef1');
+    expect(root.querySelector('.vocab-warning')!.textContent).toContain('沿用');
+
+    (root.querySelectorAll('.apply-rename')[1] as HTMLButtonElement).click(); // 巢狀欄位 state → status
+    (root.querySelectorAll('.apply-rename')[0] as HTMLButtonElement).click(); // equipmentId → eqptId
+    fx.detectChanges();
+    svc.saveToolSpecDraft.mockResolvedValue({ ...specs.current, version: 3 });
+    (root.querySelector('.save-specs') as HTMLButtonElement).click();
+    await settle();
+    const saved = svc.saveToolSpecDraft.mock.calls.at(-1)![2][0] as { inputs: { properties: Record<string, { properties?: object }> } };
+    expect(Object.keys(saved.inputs.properties)).toEqual(['eqptId', 'detail']); // 順序保留
+    expect(Object.keys(saved.inputs.properties['detail'].properties!)).toEqual(['status']);
+  });
 });

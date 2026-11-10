@@ -52,3 +52,31 @@ def test_tool_spec_tools_forward_to_csharp_with_run_token_and_show_results_to_mo
     assert any("system_owner" in t for t in tool_returns)  # 缺哪些必填欄位要讓模型看到
     assert any("查詢工單進度" in t for t in tool_returns)
     assert "tool_specs" in instructions[0]  # 草稿的 tool_specs 一併在回合開始給模型
+
+
+def test_naming_check_forwards_all_field_names_and_surfaces_failure_to_model():
+    calls, tool_returns = [], []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        fields = req.url.params.get_list("fields")
+        calls.append((req.url.path, fields, req.headers.get("x-run-token")))
+        if "bad" in fields:
+            return httpx.Response(503, json={"message": "Naming Check 暫停"})
+        return httpx.Response(200, json={"sha": "s1", "results": [{"field": "EQPTID", "status": "rename", "suggestion": "eqptId"}]})
+
+    async def script(messages, info: AgentInfo):
+        returns = [p for m in messages for p in getattr(m, "parts", []) if isinstance(p, ToolReturnPart)]
+        if not returns:
+            yield {0: DeltaToolCall(name="naming_check", json_args=json.dumps({"fields": ["EQPTID", "lotId"]})),
+                   1: DeltaToolCall(name="naming_check", json_args=json.dumps({"fields": ["bad"]}))}
+            return
+        tool_returns.extend(str(p.content) for p in returns)
+        yield "好"
+
+    app = create_app(model=FunctionModel(stream_function=script), api_key="k", tool_transport=httpx.MockTransport(handler))
+    with TestClient(app).stream("POST", "/runs", json=body(), headers=KEY) as r:
+        evs = events(r)
+    assert evs[-1][0] == "done", evs[-1]
+    assert ("/internal/tools/naming-check", ["EQPTID", "lotId"], "tok") in calls
+    assert any("eqptId" in t for t in tool_returns)  # 建議的標準名要讓模型看到
+    assert any("503" in t for t in tool_returns)     # 詞彙取不到時，失敗原因要讓模型看到
