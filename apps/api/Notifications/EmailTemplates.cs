@@ -18,6 +18,7 @@ public static class EmailTemplates
         {
             EmailEvents.Submitted => Spec("需求單送評", "需求單已送出，請您評估下列 Tool Spec", row.TicketId, specs, link),
             EmailEvents.Resubmitted => Spec("需求單重新送評", "需求單已重新送出，請您重新評估下列 Tool Spec", row.TicketId, specs, link),
+            EmailEvents.Replied => Spec("回覆評估結果", "System Owner 已回覆評估結果，Tool Spec", row.TicketId, specs, link),
             _ => throw new EmailSendException($"未知的事件類型 '{row.EventType}'。", false),
         };
     }
