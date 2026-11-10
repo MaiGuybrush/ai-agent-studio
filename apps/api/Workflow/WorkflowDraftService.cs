@@ -38,6 +38,8 @@ public sealed record DraftChange(string Path, JsonNode? Before, JsonNode? After)
 public class WorkflowDraftService(StudioDb db, TimeProvider time)
 {
     static readonly System.Text.Json.JsonSerializerOptions J = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }; // 存中文不轉成 XXXX
+    /// <summary>系統算出的衍生欄位，不參與人工修改的 diff。</summary>
+    const string DerivedKey = "naming_check";
     static JsonArray Items(JsonObject doc, string coll) => doc[coll]!.AsArray();
     static JsonObject? Find(JsonArray steps, string id) => steps.OfType<JsonObject>().FirstOrDefault(s => s["id"]?.GetValue<string>() == id);
     static JsonObject Parse(string json) => JsonNode.Parse(json)!.AsObject();
@@ -65,7 +67,7 @@ public class WorkflowDraftService(StudioDb db, TimeProvider time)
                 res.AddRange(s.Where(p => p.Key != "id").Select(p => new DraftChange($"{coll}.{id}.{p.Key}", null, p.Value?.DeepClone())));
                 continue;
             }
-            foreach (var k in s.Select(p => p.Key).Concat(old.Select(p => p.Key)).Where(k => k != "id").Distinct())
+            foreach (var k in s.Select(p => p.Key).Concat(old.Select(p => p.Key)).Where(k => k != "id" && k != DerivedKey).Distinct())
                 if (!JsonNode.DeepEquals(old[k], s[k])) res.Add(new($"{coll}.{id}.{k}", old[k]?.DeepClone(), s[k]?.DeepClone()));
         }
         foreach (var s in b.OfType<JsonObject>())
@@ -149,6 +151,23 @@ public class WorkflowDraftService(StudioDb db, TimeProvider time)
             db.TicketEvents.Add(new TicketEvent { TicketId = ticketId, Type = "OverrideHumanEdit", ActorEmpNo = empNo, At = time.GetUtcNow(), Reason = $"{coll}.{stepId}", FromValue = step.ToJsonString(J) });
         await db.SaveChangesAsync();
         return new("Ok", d.Version, []);
+    }
+
+    /// <summary>
+    /// 把系統算出的衍生欄位（如 naming_check）寫進每個 spec；不算人工修改、不遞增版本（畫面上的版本號仍有效），內容沒變就不寫。
+    /// </summary>
+    public async Task AnnotateAsync(string ticketId, string coll, string key, IReadOnlyDictionary<string, JsonNode> byId)
+    {
+        var d = await Load(ticketId, coll);
+        var cur = Parse(d.DraftJson); var seen = Parse(d.SeenJson);
+        var changed = false;
+        foreach (var doc in new[] { cur, seen })
+            foreach (var s in Items(doc, coll).OfType<JsonObject>())
+                if (byId.TryGetValue(s["id"]!.GetValue<string>(), out var v) && !JsonNode.DeepEquals(s[key], v)) { s[key] = v.DeepClone(); changed = true; }
+        if (!changed) return;
+        d.DraftJson = cur.ToJsonString(J); d.SeenJson = seen.ToJsonString(J);
+        try { await db.SaveChangesAsync(); }
+        catch (DbUpdateConcurrencyException) { db.ChangeTracker.Clear(); } // 同時有人存檔；下次開啟會再算
     }
 
     /// <summary>run 開始時：取最新草稿（steps 與 tool_specs）與「自 agent 上次看過後的人工修改」，並標記為已看過。</summary>

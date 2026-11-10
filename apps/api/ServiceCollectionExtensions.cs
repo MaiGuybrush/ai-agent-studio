@@ -129,6 +129,17 @@ namespace AiAgentStudio.Api
             services.AddSingleton<AiAgentStudio.Api.Studio.IMcpTransportFactory, AiAgentStudio.Api.Studio.McpTransportFactory>();
             services.AddSingleton<AiAgentStudio.Api.Studio.McpToolCatalog>();
 
+            // Naming Check：Tier1Vocabulary 來自公司 Gitea（Gitea:Vocabulary 區段；spec 7.1）
+            services.AddSingleton(configuration.GetSection("Gitea:Vocabulary").Get<AiAgentStudio.Api.Vocabulary.GiteaOptions>() ?? new());
+            services.AddHttpClient<AiAgentStudio.Api.Vocabulary.IVocabularySource, AiAgentStudio.Api.Vocabulary.GiteaVocabularySource>((sp, c) =>
+            {
+                if (sp.GetRequiredService<AiAgentStudio.Api.Vocabulary.GiteaOptions>().BaseUrl is { Length: > 0 } baseUrl) c.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/"); // 未設定時送出會失敗，視為抓取失敗
+                c.Timeout = TimeSpan.FromSeconds(10);
+            });
+            services.AddSingleton<AiAgentStudio.Api.Vocabulary.IVocabularyAlert, AiAgentStudio.Api.Vocabulary.LogVocabularyAlert>();
+            services.AddSingleton<AiAgentStudio.Api.Vocabulary.VocabularyService>();
+            services.AddScoped<AiAgentStudio.Api.Vocabulary.ToolSpecNaming>();
+
             // UAC 呼叫使用具名 HttpClient，逾時由 Authentication:Uac:TimeoutSeconds 控制（預設 10 秒）
             var uacTimeoutSeconds = configuration.GetValue<int?>("Authentication:Uac:TimeoutSeconds") ?? 10;
             if (uacTimeoutSeconds <= 0)
