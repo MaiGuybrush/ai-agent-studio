@@ -1,0 +1,299 @@
+import { Injectable } from '@angular/core';
+import { Observable, BehaviorSubject, of } from 'rxjs';
+import { HttpClient, HttpResponse, HttpParams } from '@angular/common/http';
+import { tap, map, concatMap, catchError, delay } from 'rxjs/operators';
+import { EmpInfo } from './emp-info';
+import { AuthInfo } from './auth-info';
+import { AuthConfigProvider } from './auth-config-provider';
+import { UserInfo } from './user-info';
+
+const TOKEN_KEY = "CIM_TK";
+const USER_KEY = "CIM_USER";
+const REFRESH_KEY = "CIM_RTK";
+
+@Injectable({
+  providedIn: 'root'  // singleton
+})
+export class UserService {
+  private _tryAuthComp = false;
+  currentUserSubject = new BehaviorSubject<EmpInfo | null>(null);
+  private _token: string | null = null;
+  public loginUrl?: string;
+  public logoutUrl?: string;
+  public get token(): string {
+    return window.localStorage.getItem(TOKEN_KEY) ?? "";
+  }
+  public saveToken(token: string | null): void {
+    window.localStorage.removeItem(TOKEN_KEY);
+    if (token != null) {
+      window.localStorage.setItem(TOKEN_KEY, token);
+    }
+  }
+  public saveUser(user: EmpInfo | null): void {
+    window.localStorage.removeItem(USER_KEY);
+    if (user != null) {
+      window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+    }
+  }
+
+  public saveRefreshToken(token: string | null): void {
+    window.localStorage.removeItem(REFRESH_KEY);
+    if (token != null) {
+      window.localStorage.setItem(REFRESH_KEY, token);
+    }
+  }
+
+  public parseJwt (token: string): any {
+    var base64Url = token.split('.')[1];
+    var base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    var jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+
+    return JSON.parse(jsonPayload);
+  };
+
+  _currentUser: EmpInfo | null = null;
+  public get currentUser(): EmpInfo | null {
+    return this._currentUser;
+  }
+
+  constructor(private http: HttpClient, private configProvider: AuthConfigProvider) {
+    const userJSON = window.localStorage.getItem(USER_KEY)
+    const user = userJSON ?
+                JSON.parse(userJSON) as EmpInfo : null;
+    if (user) {
+      this._currentUser = user;
+      console.log('get user from session storage!');
+      this.currentUserSubject.next(this._currentUser);
+    }
+  }
+
+  /**
+   * deprecated..
+   * 為相容舊app流程，故加上_tryAuthComp，否則舊app 寫法會出問題
+   * 新app建議使用currentUser 進行判斷即可。
+   */
+  public isAuthenticated(): boolean {
+    return this._tryAuthComp && this.currentUser != null;
+  }
+
+  public clearLoginInfo() {
+    console.log('publish user logout.');
+    this.saveToken(null);
+    this.saveUser(null);
+    this.saveRefreshToken(null);
+    this._currentUser = null;
+    this.currentUserSubject.next(null);
+  }
+
+  /**
+   * deprecated, 請改用logOutObs
+   */
+  public logOut() {
+    this.clearLoginInfo();
+    this.http.get<{logoutPage: string, loginPage: string}>(this.configProvider.authApiUrl() + '/Logout').subscribe(m => {
+      const url = window.location.href.split('#')[0];
+      console.log('logOutToSso:', m.logoutPage + '?url=' + encodeURI(url));
+      window.location.href = m.logoutPage + '?url=' + encodeURI(url);
+    });
+  }
+
+  public logOutObs(): Observable<any> {
+    this.clearLoginInfo();
+    this.logOut()
+    return this.http.get<{logoutPage: string, loginPage: string}>(this.configProvider.authApiUrl() + '/Logout').pipe(tap(m => {
+      const url = window.location.href.split('#')[0];
+      console.log('logOutToSso:', m.logoutPage + '?url=' + encodeURI(url));
+      window.location.href = m.logoutPage + '?url=' + encodeURI(url);
+    }));
+  }
+
+  public changeUser(empInfo: EmpInfo) {
+//        localStorage["currentUser"] = JSON.stringify(res);
+      this.saveUser(empInfo);
+      this.saveToken(empInfo.token);
+      this.saveRefreshToken(empInfo.refreshToken);
+      this._currentUser = empInfo;
+      console.log('user changed publish!');
+      this.currentUserSubject.next(this._currentUser);
+  }
+
+  public refreshToken(): Observable<EmpInfo> {
+    let requestUrl = this.configProvider.authApiUrl() + '/RefreshToken';
+    const refreshToken = localStorage.getItem(REFRESH_KEY);
+    // if (refreshToken) {
+    //   requestUrl += `?refreshToken=${encodeURIComponent(refreshToken)}`;
+    // }
+    console.log("refresh token");
+    return this.http.post<EmpInfo>(requestUrl, {refreshToken: refreshToken}).pipe(tap(m => {
+      localStorage.setItem(REFRESH_KEY, m.refreshToken);
+      localStorage.setItem(USER_KEY, JSON.stringify(m));
+      localStorage.setItem(TOKEN_KEY, m.token);
+    }));
+
+  }
+
+  public tryAuth(returnUrl: string, autoRedirectSso: boolean): Observable<EmpInfo | null> {
+    let requestUrl = this.configProvider.authApiUrl() + '/RefreshToken';
+    const refreshToken = localStorage.getItem(REFRESH_KEY);
+    // if (refreshToken) {
+    //   requestUrl += `?refreshToken=${encodeURIComponent(refreshToken)}`;
+    // }
+    return this.http.post<EmpInfo>(requestUrl, {refreshToken: refreshToken})
+    .pipe(
+      tap(m => {
+      const jwtPayload = this.parseJwt(m.token);
+      console.log(jwtPayload);
+      this.changeUser(m);
+      this._tryAuthComp = true;
+      }),
+      catchError(e => {
+        console.log(`tryAuth refreshToken error = ${e}`);
+        return of(null);
+      }),
+      concatMap(u => {
+        if (u == null && autoRedirectSso) {
+          return this.http.get<{loginPage:string, logoutPage: string}>(this.configProvider.authApiUrl() + "/SsoUrl")
+          .pipe(map(url => {
+            this.redirectToSsoUrl(returnUrl, url.loginPage);
+            return null;
+          }), delay(3000));
+        }
+        return of(u);
+      })
+    );
+  }
+
+  public verifyCertificate(certKey: string): Observable<EmpInfo> {
+    return this.http.post<EmpInfo>(this.configProvider.authApiUrl() + '/VerifyCert'
+    , { 'CertificateKey': certKey}).pipe(tap(res => {
+        if (res) {
+          this.changeUser(res);
+        }
+      }));
+  }
+
+  public parseURLByHash(url: string) {
+    const parser = document.createElement('a');
+    const searchObject: any = {};
+    // Let the browser do the work
+    parser.href = url;
+    // Convert query string to object
+    const queries = parser.hash.replace(/^.*\?/, '').split('&');
+    for (let i = 0; i < queries.length; i++) {
+      const split = queries[i].split('=');
+      searchObject[split[0]] = decodeURIComponent(split[1]);
+    }
+    return {
+      protocol: parser.protocol,
+      host: parser.host,
+      hostname: parser.hostname,
+      port: parser.port,
+      pathname: parser.pathname,
+      search: parser.search,
+      searchObject: searchObject,
+      hash: parser.hash
+    };
+  }
+
+  public redirectToSso(returnUrl: string) {
+    const url = this.removeURLParameter(returnUrl, 'CertificateKey');
+    // if (url.indexOf('#/authenticate') < 0) {
+    //   url = url.concat('#/authenticate');
+    // }
+    console.log('redirectToSso:', this.configProvider.loginUrl() + '?url=' + encodeURIComponent(url));
+    window.location.href = this.configProvider.loginUrl() + '?url=' + encodeURIComponent(url);
+  }
+
+  protected redirectToSsoUrl(returnUrl: string, ssoUrl: string) {
+    const url = this.removeURLParameter(returnUrl, 'CertificateKey');
+    // if (url.indexOf('#/authenticate') < 0) {
+    //   url = url.concat('#/authenticate');
+    // }
+    console.log('redirectToSso:', ssoUrl + '?url=' + encodeURIComponent(url));
+    window.location.href = ssoUrl + '?url=' + encodeURIComponent(url);
+  }
+
+  removeURLParameter(url: string, parameter: string): string {
+    const urlparts = url.split('?');
+    if (urlparts.length >= 2) {
+
+      const prefix = encodeURIComponent(parameter) + '=';
+      const pars = urlparts[1].split(/[&;]/g);
+
+      for (let i = pars.length; i-- > 0;) {
+          if (pars[i].lastIndexOf(prefix, 0) !== -1) {
+              pars.splice(i, 1);
+          }
+      }
+      url = urlparts[0] + (pars.length > 0 ? '?' + pars.join('&') : '');
+      return url;
+    } else {
+        return url;
+    }
+  }
+
+  public setPreference(app: string, itemName: string, item: any): any {
+    const appPref = localStorage.getItem(app)
+
+    let pref = appPref ? JSON.parse(appPref) : undefined;
+    if (!pref) {
+      pref = {};
+    }
+    pref[itemName] = item;
+    localStorage.setItem(app, JSON.stringify(pref));
+    return pref;
+  }
+
+  public getPreference(app: string, itemName: string): any {
+    const itemString = localStorage.getItem(app);
+    return itemString ? JSON.parse(itemString)[itemName] : null;
+  }
+
+  public checkAuthorize(shop: string, id: string, functionId: string, subSystem?: string): Observable<HttpResponse<any>> {
+    return this.http.get(
+      `${this.configProvider.uacApiUrl(shop)}/CheckAuthorize/${id}/${functionId}?subSystem=${subSystem}`,
+    { observe: 'response' });
+  }
+
+  public uacAuth(shop: string, id: string, password: string): Observable<EmpInfo> {
+    return this.http.post<EmpInfo>(this.configProvider.uacApiUrl(shop),
+    {
+      "id": id,
+      "password": password
+    }).pipe(map(empInfo => {
+      empInfo.id = empInfo.id ?? empInfo.no;
+      localStorage.setItem('refreshToken', empInfo.refreshToken);
+      this.changeUser(empInfo);
+      return empInfo;
+    }));
+  }
+
+  public getUserConfig(userId?: string, apName?: string, functionName?: string, shop?: string): Observable<any> {
+    const params = new HttpParams()
+      .set('userId', userId ? userId : '')
+      .set('apName', apName ? apName : '')
+      .set('functionName', functionName ? functionName : '')
+      .set('shop', shop ? shop : '')
+    const data = this.http.get<any>(this.configProvider.userApiUrl(), { params: params })
+    return data;
+  }
+
+  public updateUserConfig(configData?: UserInfo): Observable<UserInfo> {
+    return this.http.put<UserInfo>(this.configProvider.userApiUrl(), configData);
+  }
+
+  public setUserConfig(configData?: UserInfo): Observable<UserInfo> {
+    return this.http.post<UserInfo>(this.configProvider.userApiUrl(), configData);
+  }
+
+  public deleteUserConfig(userId?: string, apName?: string, no?: number, shop?: string): Observable<any> {
+    const params = new HttpParams()
+      .set('userId', userId ? userId : '')
+      .set('apName', apName ? apName : '')
+      .set('no', no ? no : '')
+      .set('shop', shop ? shop : '');
+    return this.http.delete<any>(this.configProvider.userApiUrl(), { params: params });
+  }
+}

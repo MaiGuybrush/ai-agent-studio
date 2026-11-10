@@ -1,0 +1,2356 @@
+openapi: 3.0.1
+info:
+  title: UAC API 7.1.7.0
+  version: v1
+paths:
+  /ADAuth:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInfo'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticateResponse'
+  /ADAuth/AuthOnly:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdAuthRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdEmployeeDTO'
+  /ADAuth/GenerateToken:
+    post:
+      summary: Generate long live token for AP
+      requestBody:
+        description: ''
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateJwtInputDTO'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateJwtInputDTO'
+  /ADAuth/SsoUrl:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SsoUrlResponse'
+  /ADAuth/GetEmpInfo:
+    get:
+      responses:
+        '200':
+          description: OK
+  /ADAuth/LogOut:
+    get:
+      responses:
+        '200':
+          description: OK
+  /ADAuth/Verify:
+    post:
+      summary: "(deprecated) replace by VerifyCert\r\nverify sso login status"
+      requestBody:
+        description: ''
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyInfo'
+      responses:
+        '200':
+          description: OK
+  /ADAuth/VerifyCert:
+    post:
+      summary: verify sso login status
+      requestBody:
+        description: ''
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyInfo'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticateResponse'
+  /ADAuth/RevokeToken:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeTokenRequest'
+      responses:
+        '200':
+          description: OK
+  /ADAuth/RefreshToken:
+    get:
+      summary: Get new JWT, refreshToken will be rotate too.
+      parameters:
+      - name: refreshToken
+        in: query
+        description: usually for test purpose
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Get new JWT, refreshToken will be rotate too.
+      requestBody:
+        description: usually for test purpose
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticateResponse'
+  /ADAuth/RefreshTokenSso:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenSsoRequest'
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Auth:
+    post:
+      parameters:
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInfo'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticateResponse'
+  /{urlshop}/Auth/CheckAuthorize/{id}/{funcId}:
+    get:
+      parameters:
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: funcId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: subSystem
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Auth/AuthByKey:
+    post:
+      parameters:
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthByKeyRequest'
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Auth/SsoUrl:
+    get:
+      parameters:
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Auth/GetEmpInfo:
+    get:
+      parameters:
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Auth/LogOut:
+    get:
+      parameters:
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Auth/Verify:
+    post:
+      summary: "(deprecated) replace by VerifyCert\r\nverify sso login status"
+      parameters:
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: ''
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyInfo'
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Auth/VerifyCert:
+    post:
+      summary: verify sso login status
+      parameters:
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: ''
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyInfo'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticateResponse'
+  /{urlshop}/Auth/RevokeToken:
+    post:
+      parameters:
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeTokenRequest'
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Auth/RefreshToken:
+    get:
+      summary: Get new JWT, refreshToken will be rotate too.
+      parameters:
+      - name: refreshToken
+        in: query
+        description: usually for test purpose
+        schema:
+          type: string
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Get new JWT, refreshToken will be rotate too.
+      parameters:
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: usually for test purpose
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Auth/RefreshTokenSso:
+    post:
+      parameters:
+      - name: urlshop
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenSsoRequest'
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Config/param/{paramName}:
+    get:
+      summary: get employee title list
+      parameters:
+      - name: urlshop
+        in: path
+        description: ''
+        required: true
+        schema:
+          type: string
+      - name: paramName
+        in: path
+        description: ''
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+  /{urlshop}/Dept/{deptCode}:
+    get:
+      summary: 取得部門資訊
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: deptCode
+        in: path
+        description: 部門代碼
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentDTO'
+  /{urlshop}/Dept:
+    get:
+      summary: 取得部門清單
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: page
+        in: query
+        description: 頁碼，從0開始
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: pageSize
+        in: query
+        description: 每頁筆數，最大5000
+        schema:
+          type: integer
+          format: int32
+          default: 5000
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Department'
+    post:
+      summary: 新增部門
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 要新增的部門資料陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/DepartmentDTO'
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: 更新部門
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 要更新的部門資料陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/DepartmentDTO'
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: 刪除部門
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 要刪除的部門代碼陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Export/function/All:
+    get:
+      summary: 匯出所有功能清單
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+  /{urlshop}/Export/user/{userId}/functions:
+    get:
+      summary: 匯出用戶功能清單
+      parameters:
+      - name: userId
+        in: path
+        description: 用戶ID
+        required: true
+        schema:
+          type: string
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+  /{urlshop}/Export/groupFunctions:
+    get:
+      summary: 匯出群組功能對應清單
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+  /{urlshop}/Export/groupUsers:
+    get:
+      summary: 匯出群組用戶對應清單
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+  /{urlshop}/Function/{subSystem}/{id}:
+    get:
+      summary: 取得特定子系統的特定功能資訊
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: subSystem
+        in: path
+        description: 子系統代碼
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        description: 功能ID
+        required: true
+        schema:
+          type: string
+      - name: includeGroup
+        in: query
+        description: 是否包含群組資訊
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FunctionDTO'
+  /{urlshop}/Function/{subSystem}:
+    get:
+      summary: 取得特定子系統的功能清單
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: subSystem
+        in: path
+        description: 子系統代碼
+        required: true
+        schema:
+          type: string
+      - name: page
+        in: query
+        description: 頁碼
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: pageSize
+        in: query
+        description: 每頁筆數
+        schema:
+          type: integer
+          format: int32
+          default: 5000
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FunctionDTO'
+  /{urlshop}/Function:
+    get:
+      summary: 取得所有系統的功能清單
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: page
+        in: query
+        description: 頁碼
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: pageSize
+        in: query
+        description: 每頁筆數
+        schema:
+          type: integer
+          format: int32
+          default: 5000
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SystemFunction'
+    post:
+      summary: 新增功能
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 功能資料陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/FunctionDTO'
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: 更新功能
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 功能資料陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/FunctionDTO'
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: 刪除功能
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 要刪除的功能陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/FunctionDTO'
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/Group/{groupId}:
+    get:
+      summary: 取得群組資訊
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: groupId
+        in: path
+        description: 群組ID
+        required: true
+        schema:
+          type: string
+      - name: includeFunction
+        in: query
+        description: 是否包含功能資訊
+        schema:
+          type: boolean
+      - name: includeUser
+        in: query
+        description: 是否包含用戶資訊
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDTO'
+  /{urlshop}/Group:
+    get:
+      summary: 取得群組清單
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: subSystem
+        in: query
+        description: 子系統篩選條件
+        schema:
+          type: string
+          default: ''
+      - name: page
+        in: query
+        description: 頁碼，從0開始
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: pageSize
+        in: query
+        description: 每頁筆數，最大5000
+        schema:
+          type: integer
+          format: int32
+          default: 5000
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupDTO'
+    post:
+      summary: 新增群組
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 群組資料陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/GroupDTO'
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: 更新群組
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 群組資料陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/GroupDTO'
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: 刪除群組
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 要刪除的群組ID陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: OK
+  /HrDept/{DeptId}:
+    get:
+      summary: 取得HR部門資訊
+      parameters:
+      - name: shop
+        in: query
+        description: 工廠代碼
+        schema:
+          type: string
+      - name: deptId
+        in: path
+        description: 部門ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HrDeptDTO'
+  /HrDept:
+    post:
+      summary: 新增或更新HR部門資料
+      parameters:
+      - name: shop
+        in: query
+        description: 工廠代碼
+        schema:
+          type: string
+      - name: truncate
+        in: query
+        description: 是否清空現有資料後再新增
+        schema:
+          type: boolean
+          default: false
+      requestBody:
+        description: HR部門資料陣列，最大2000筆
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/HrDeptDTO'
+      responses:
+        '200':
+          description: OK
+  /HrEmployee/{empIdentity}/basic-info:
+    get:
+      parameters:
+      - name: empIdentity
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HrEmployeeSimpleDTO'
+  /HrEmployee/{empIdentity}:
+    get:
+      summary: 取得員工完整資訊
+      parameters:
+      - name: empIdentity
+        in: path
+        description: 員工識別碼
+        required: true
+        schema:
+          type: string
+      - name: includeDept
+        in: query
+        description: 是否包含部門資訊
+        schema:
+          type: boolean
+          default: false
+      - name: useEmpId
+        in: query
+        description: true表示empIdentity為員工ID，false表示為AD帳號，預設為true
+        schema:
+          type: boolean
+          default: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HrEmployeeDTO'
+  /{urlshop}/System/{id}:
+    get:
+      summary: 取得系統定義
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        description: 系統ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemDefine'
+  /{urlshop}/System:
+    get:
+      summary: 取得系統清單
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+    post:
+      summary: 新增系統
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 系統定義資料陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/SystemDTO'
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: 更新系統
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 系統定義資料陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/SystemDTO'
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: 刪除系統
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 要刪除的系統ID陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/User:
+    get:
+      summary: 取得用戶清單
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: page
+        in: query
+        description: 頁碼，從0開始
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: pageSize
+        in: query
+        description: 每頁筆數，最大5000
+        schema:
+          type: integer
+          format: int32
+          default: 5000
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserDTO'
+    post:
+      summary: 新增用戶
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 用戶資料陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserDTO'
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: 更新用戶資料
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 用戶資料陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserDTO'
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: 刪除用戶
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: 要刪除的用戶ID陣列
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: OK
+  /{urlshop}/User/{id}:
+    get:
+      summary: 取得特定用戶資訊
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        description: 用戶ID
+        required: true
+        schema:
+          type: string
+      - name: includeGroup
+        in: query
+        description: 是否包含群組資訊
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDTO'
+  /{urlshop}/User/{id}/{infoType}:
+    get:
+      summary: 取得用戶的可存取功能清單
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        description: 用戶ID
+        required: true
+        schema:
+          type: string
+      - name: infoType
+        in: path
+        description: 資訊類型，目前支援"functions"
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserFunctionDTO'
+  /{urlshop}/User/{userId}/functions:
+    get:
+      summary: 取得用戶功能清單（替代路由）
+      parameters:
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      - name: userId
+        in: path
+        description: 用戶ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Group'
+  /{urlshop}/User/{id}/isAdmin:
+    get:
+      summary: 檢查用戶是否為管理員
+      parameters:
+      - name: id
+        in: path
+        description: 用戶ID
+        required: true
+        schema:
+          type: string
+      - name: urlshop
+        in: path
+        description: 工廠代碼
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: boolean
+components:
+  schemas:
+    AdAuthRequest:
+      type: object
+      properties:
+        authId:
+          type: string
+          nullable: true
+        userId:
+          type: string
+          nullable: true
+        password:
+          type: string
+          nullable: true
+      additionalProperties: false
+    AdEmployeeDTO:
+      type: object
+      properties:
+        adId:
+          type: string
+          description: AD 帳號
+          nullable: true
+        name:
+          type: string
+          description: 姓名
+          nullable: true
+        deptId:
+          type: string
+          description: HR部門代號
+          nullable: true
+        empId:
+          type: string
+          description: 員工編號(8碼數字)
+          nullable: true
+        deptNameFull:
+          type: string
+          description: 部門全名
+          nullable: true
+      additionalProperties: false
+      description: "LDAP AD 員工資訊 DTO\r\n主鍵：EmpId\r\n唯一限制鍵：AdId"
+    AuthByKeyRequest:
+      type: object
+      properties:
+        system:
+          type: string
+          nullable: true
+        verifyData:
+          type: string
+          nullable: true
+        signature:
+          type: string
+          nullable: true
+      additionalProperties: false
+    AuthenticateResponse:
+      type: object
+      properties:
+        'no':
+          type: string
+          description: 員工編號
+          nullable: true
+        id:
+          type: string
+          description: 帳號
+          nullable: true
+        name:
+          type: string
+          description: 姓名
+          nullable: true
+        department:
+          type: string
+          description: 部門
+          nullable: true
+        orgShop:
+          type: string
+          description: 組織單位/Shop
+          nullable: true
+        location:
+          type: string
+          description: 地點
+          nullable: true
+        shops:
+          type: array
+          items:
+            type: string
+          description: 相關 Shop 列表
+          nullable: true
+        token:
+          type: string
+          description: JWT Token
+          nullable: true
+        departmentCode:
+          type: string
+          description: 部門代碼
+          nullable: true
+        refreshToken:
+          type: string
+          description: 刷新 Token
+          nullable: true
+      additionalProperties: false
+      description: 認證回應資料
+    Department:
+      type: object
+      properties:
+        header:
+          type: string
+          nullable: true
+        dept:
+          type: string
+          nullable: true
+        deptName:
+          type: string
+          nullable: true
+        pLastAction00:
+          type: string
+          nullable: true
+        pUserId00:
+          type: string
+          nullable: true
+        pEventCd00:
+          type: string
+          nullable: true
+        pLastAction01:
+          type: string
+          nullable: true
+        pUserId01:
+          type: string
+          nullable: true
+        pEventCd01:
+          type: string
+          nullable: true
+        pLastAction02:
+          type: string
+          nullable: true
+        pUserId02:
+          type: string
+          nullable: true
+        pEventCd02:
+          type: string
+          nullable: true
+        pLastAction03:
+          type: string
+          nullable: true
+        pUserId03:
+          type: string
+          nullable: true
+        pEventCd03:
+          type: string
+          nullable: true
+        pLastAction04:
+          type: string
+          nullable: true
+        pUserId04:
+          type: string
+          nullable: true
+        pEventCd04:
+          type: string
+          nullable: true
+        pInworkState:
+          type: string
+          nullable: true
+        pSetupState:
+          type: string
+          nullable: true
+        pLockUser:
+          type: string
+          nullable: true
+        pLockTime:
+          type: string
+          format: date-time
+          nullable: true
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+          nullable: true
+      additionalProperties: false
+    DepartmentDTO:
+      type: object
+      properties:
+        dept:
+          type: string
+          description: UAC 部門代號
+          nullable: true
+        deptName:
+          type: string
+          description: UAC 部門名稱
+          nullable: true
+      additionalProperties: false
+      description: "UAC 部門資料 DTO\r\n主鍵：Dept。"
+    FunctionDTO:
+      type: object
+      properties:
+        subSystem:
+          type: string
+          description: 子系統
+          nullable: true
+        functionId:
+          type: string
+          description: 功能代號
+          nullable: true
+        functionName:
+          type: string
+          description: 功能名稱
+          nullable: true
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/FunctionGroupDTO'
+          description: 群組列表，代表哪些群組擁有此功能的存取權限
+          nullable: true
+      additionalProperties: false
+      description: "UAC 系統功能詳細資料 DTO\r\n複合主鍵：SubSystem 與 FunctionId。"
+    FunctionGroupDTO:
+      type: object
+      properties:
+        groupId:
+          type: string
+          description: 群組代號
+          nullable: true
+        groupName:
+          type: string
+          description: 群組名稱
+          nullable: true
+        accessFlag:
+          type: string
+          description: 存取權限標記，目前沒有實際用途
+          nullable: true
+      additionalProperties: false
+      description: "UAC 群組資料 DTO\r\n主鍵：GroupId"
+    GenerateJwtInputDTO:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: 使用者代號
+          nullable: true
+        usage:
+          type: string
+          description: 用途
+          nullable: true
+        ttl:
+          type: integer
+          description: 存活時間 (分鐘)
+          format: int32
+      additionalProperties: false
+      description: 產生持久性JWT的輸入資訊 DTO
+    Group:
+      type: object
+      properties:
+        header:
+          type: string
+          nullable: true
+        groupId:
+          type: string
+          nullable: true
+        groupName:
+          type: string
+          nullable: true
+        subSystem:
+          type: string
+          nullable: true
+        pLastAction00:
+          type: string
+          nullable: true
+        pUserId00:
+          type: string
+          nullable: true
+        pEventCd00:
+          type: string
+          nullable: true
+        pLastAction01:
+          type: string
+          nullable: true
+        pUserId01:
+          type: string
+          nullable: true
+        pEventCd01:
+          type: string
+          nullable: true
+        pLastAction02:
+          type: string
+          nullable: true
+        pUserId02:
+          type: string
+          nullable: true
+        pEventCd02:
+          type: string
+          nullable: true
+        pLastAction03:
+          type: string
+          nullable: true
+        pUserId03:
+          type: string
+          nullable: true
+        pEventCd03:
+          type: string
+          nullable: true
+        pLastAction04:
+          type: string
+          nullable: true
+        pUserId04:
+          type: string
+          nullable: true
+        pEventCd04:
+          type: string
+          nullable: true
+        pInworkState:
+          type: string
+          nullable: true
+        pSetupState:
+          type: string
+          nullable: true
+        pLockUser:
+          type: string
+          nullable: true
+        pLockTime:
+          type: string
+          format: date-time
+          nullable: true
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserGroup'
+          nullable: true
+        functions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupFunction'
+          nullable: true
+      additionalProperties: false
+    GroupDTO:
+      type: object
+      properties:
+        groupId:
+          type: string
+          description: 群組代號
+          nullable: true
+        groupName:
+          type: string
+          description: 群組名稱
+          nullable: true
+        subSystem:
+          type: string
+          description: 子系統
+          nullable: true
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSimpleDTO'
+          description: 使用者列表, 表示此群組底下的使用者
+          nullable: true
+        functions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupFunctionDTO'
+          description: 功能列表, 表示此群組擁有的功能權限
+          nullable: true
+      additionalProperties: false
+      description: "UAC 群組詳細資料 DTO\r\n主鍵：GroupId\r\n唯一限制鍵：SubSystem + GroupId"
+    GroupFunction:
+      type: object
+      properties:
+        header:
+          type: string
+          nullable: true
+        groupId:
+          type: string
+          nullable: true
+        subSystem:
+          type: string
+          nullable: true
+        functionId:
+          type: string
+          nullable: true
+        accessFlag:
+          type: string
+          nullable: true
+        systemSeq:
+          type: integer
+          format: int32
+        functionInfo:
+          $ref: '#/components/schemas/SystemFunction'
+        groupInfo:
+          $ref: '#/components/schemas/Group'
+      additionalProperties: false
+    GroupFunctionDTO:
+      type: object
+      properties:
+        subSystem:
+          type: string
+          description: 子系統
+          nullable: true
+        functionId:
+          type: string
+          description: 功能代號
+          nullable: true
+        functionName:
+          type: string
+          description: 功能名稱
+          nullable: true
+        accessFlag:
+          type: string
+          description: 存取權限標記
+          nullable: true
+      additionalProperties: false
+      description: "UAC 功能資訊 DTO\r\n主鍵：SubSystem 與 FunctionId"
+    HrDeptDTO:
+      type: object
+      properties:
+        deptId:
+          type: string
+          description: 部門代號
+          nullable: true
+        managerEmpId:
+          type: string
+          description: 主管員工編號
+          nullable: true
+        deptLevel:
+          type: string
+          description: 部門層級
+          nullable: true
+        deptName:
+          type: string
+          description: 部門名稱
+          nullable: true
+        deptNameFull:
+          type: string
+          description: 部門全名
+          nullable: true
+        deptNameEng:
+          type: string
+          description: 部門英文名稱
+          nullable: true
+        upDeptId:
+          type: string
+          description: 上層部門代號
+          nullable: true
+        l05DeptId:
+          type: string
+          description: L05 層級部門代號
+          nullable: true
+        l05DeptName:
+          type: string
+          description: L05 層級部門名稱
+          nullable: true
+        l10DeptId:
+          type: string
+          description: L10 層級部門代號
+          nullable: true
+        l10DeptName:
+          type: string
+          description: L10 層級部門名稱
+          nullable: true
+        l20DeptId:
+          type: string
+          description: L20 層級部門代號
+          nullable: true
+        l20DeptName:
+          type: string
+          description: L20 層級部門名稱
+          nullable: true
+        l30DeptId:
+          type: string
+          description: L30 層級部門代號
+          nullable: true
+        l30DeptName:
+          type: string
+          description: L30 層級部門名稱
+          nullable: true
+        l40DeptId:
+          type: string
+          description: L40 層級部門代號
+          nullable: true
+        l40DeptName:
+          type: string
+          description: L40 層級部門名稱
+          nullable: true
+        l50DeptId:
+          type: string
+          description: L50 層級部門代號
+          nullable: true
+        l50DeptName:
+          type: string
+          description: L50 層級部門名稱
+          nullable: true
+        tStamp:
+          type: string
+          description: 資料時間戳記
+          format: date-time
+          nullable: true
+        shops:
+          type: array
+          items:
+            type: string
+          description: 相關 Shop(工廠廠別)
+          nullable: true
+      additionalProperties: false
+      description: HR 部門資料 DTO
+    HrEmployeeDTO:
+      type: object
+      properties:
+        managerEmpId:
+          type: string
+          description: 主管員工編號
+          nullable: true
+        title:
+          type: string
+          description: 職稱
+          nullable: true
+        oldCompId:
+          type: string
+          description: 舊公司代號
+          nullable: true
+        oldEmpId:
+          type: string
+          description: 舊員工編號
+          nullable: true
+        extNo:
+          type: string
+          description: 分機號碼
+          nullable: true
+        email:
+          type: string
+          description: 電子郵件
+          nullable: true
+        adId:
+          type: string
+          description: AD 帳號
+          nullable: true
+        name:
+          type: string
+          description: 姓名
+          nullable: true
+        hired:
+          type: string
+          description: 到職日
+          format: date-time
+          nullable: true
+        deptTxt:
+          type: string
+          description: 部門描述
+          nullable: true
+        deptId:
+          type: string
+          description: 部門代號
+          nullable: true
+        idtyTxt:
+          type: string
+          description: 身分別描述
+          nullable: true
+        idty:
+          type: string
+          description: 身分別
+          nullable: true
+        locTxt:
+          type: string
+          description: 地點描述
+          nullable: true
+        loc:
+          type: string
+          description: 地點
+          nullable: true
+        siteTxt:
+          type: string
+          description: 廠區描述
+          nullable: true
+        site:
+          type: string
+          description: 廠區
+          nullable: true
+        regionTxt:
+          type: string
+          description: 區域描述
+          nullable: true
+        region:
+          type: string
+          description: 區域
+          nullable: true
+        shiftTxt:
+          type: string
+          description: 班別描述
+          nullable: true
+        shift:
+          type: string
+          description: 班別
+          nullable: true
+        empId:
+          type: string
+          description: 員工編號(8碼數字)
+          nullable: true
+        jobCode2Txt:
+          type: string
+          description: 職務代碼2描述
+          nullable: true
+        deptNameFull:
+          type: string
+          description: 部門全名
+          nullable: true
+        tStamp:
+          type: string
+          description: 資料時間戳記
+          format: date-time
+          nullable: true
+        deptDetail:
+          $ref: '#/components/schemas/HrDeptDTO'
+      additionalProperties: false
+      description: HR 員工資料 DTO
+    HrEmployeeSimpleDTO:
+      type: object
+      properties:
+        empId:
+          type: string
+          description: 員工編號(8碼數字)
+          nullable: true
+        name:
+          type: string
+          description: 姓名
+          nullable: true
+        adId:
+          type: string
+          description: AD 帳號
+          nullable: true
+        deptName:
+          type: string
+          description: 部門名稱
+          nullable: true
+      additionalProperties: false
+      description: HR 員工簡易資料 DTO
+    LoginInfo:
+      type: object
+      properties:
+        shop:
+          type: string
+          description: Shop
+          nullable: true
+        id:
+          type: string
+          description: 帳號
+          nullable: true
+        password:
+          type: string
+          description: 密碼
+          nullable: true
+      additionalProperties: false
+      description: 登入資訊
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        status:
+          type: integer
+          format: int32
+          nullable: true
+        detail:
+          type: string
+          nullable: true
+        instance:
+          type: string
+          nullable: true
+      additionalProperties: {}
+    RefreshTokenRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          description: 刷新 Token
+          nullable: true
+      additionalProperties: false
+      description: 刷新 Token 請求
+    RefreshTokenSsoRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Token
+          nullable: true
+      additionalProperties: false
+      description: SSO 刷新 Token 請求
+    RevokeTokenRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          description: 要撤銷的 Token
+          nullable: true
+      additionalProperties: false
+      description: 撤銷 Token 請求
+    SystemDTO:
+      type: object
+      properties:
+        subSystem:
+          type: string
+          description: 子系統
+          nullable: true
+      additionalProperties: false
+      description: "UAC 定義的子系統資訊 DTO\r\n主鍵：SubSystem"
+    SystemDefine:
+      type: object
+      properties:
+        header:
+          type: string
+          nullable: true
+        subSystem:
+          type: string
+          nullable: true
+        pLastAction00:
+          type: string
+          nullable: true
+        pUserId00:
+          type: string
+          nullable: true
+        pEventCd00:
+          type: string
+          nullable: true
+        pLastAction01:
+          type: string
+          nullable: true
+        pUserId01:
+          type: string
+          nullable: true
+        pEventCd01:
+          type: string
+          nullable: true
+        pLastAction02:
+          type: string
+          nullable: true
+        pUserId02:
+          type: string
+          nullable: true
+        pEventCd02:
+          type: string
+          nullable: true
+        pLastAction03:
+          type: string
+          nullable: true
+        pUserId03:
+          type: string
+          nullable: true
+        pEventCd03:
+          type: string
+          nullable: true
+        pLastAction04:
+          type: string
+          nullable: true
+        pUserId04:
+          type: string
+          nullable: true
+        pEventCd04:
+          type: string
+          nullable: true
+        pInworkState:
+          type: string
+          nullable: true
+        pSetupState:
+          type: string
+          nullable: true
+        pLockUser:
+          type: string
+          nullable: true
+        pLockTime:
+          type: string
+          format: date-time
+          nullable: true
+        functions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SystemFunction'
+          nullable: true
+      additionalProperties: false
+    SystemFunction:
+      type: object
+      properties:
+        header:
+          type: string
+          nullable: true
+        subSystem:
+          type: string
+          nullable: true
+        functionId:
+          type: string
+          nullable: true
+        functionName:
+          type: string
+          nullable: true
+        systemSeq:
+          type: integer
+          format: int32
+        eqptCheckFlag:
+          type: string
+          nullable: true
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupFunction'
+          nullable: true
+        system:
+          $ref: '#/components/schemas/SystemDefine'
+      additionalProperties: false
+    User:
+      type: object
+      properties:
+        header:
+          type: string
+          nullable: true
+        userId:
+          type: string
+          nullable: true
+        userName:
+          type: string
+          nullable: true
+        chineseName:
+          type: string
+          nullable: true
+        dept:
+          type: string
+          nullable: true
+        deptName:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        extNo:
+          type: string
+          nullable: true
+        password:
+          type: string
+          nullable: true
+        notesId:
+          type: string
+          nullable: true
+        brmRelease:
+          type: string
+          nullable: true
+        brmSuper:
+          type: string
+          nullable: true
+        resetFlg:
+          type: string
+          nullable: true
+        expireFlg:
+          type: string
+          nullable: true
+        expireDate:
+          type: string
+          format: date-time
+          nullable: true
+        disableFlg:
+          type: string
+          nullable: true
+        pLastAction00:
+          type: string
+          nullable: true
+        pUserId00:
+          type: string
+          nullable: true
+        pEventCd00:
+          type: string
+          nullable: true
+        pLastAction01:
+          type: string
+          nullable: true
+        pUserId01:
+          type: string
+          nullable: true
+        pEventCd01:
+          type: string
+          nullable: true
+        pLastAction02:
+          type: string
+          nullable: true
+        pUserId02:
+          type: string
+          nullable: true
+        pEventCd02:
+          type: string
+          nullable: true
+        pLastAction03:
+          type: string
+          nullable: true
+        pUserId03:
+          type: string
+          nullable: true
+        pEventCd03:
+          type: string
+          nullable: true
+        pLastAction04:
+          type: string
+          nullable: true
+        pUserId04:
+          type: string
+          nullable: true
+        pEventCd04:
+          type: string
+          nullable: true
+        pInworkState:
+          type: string
+          nullable: true
+        pSetupState:
+          type: string
+          nullable: true
+        pLockUser:
+          type: string
+          nullable: true
+        pLockTime:
+          type: string
+          format: date-time
+          nullable: true
+        cmoUserId:
+          type: string
+          nullable: true
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserGroup'
+          nullable: true
+      additionalProperties: false
+    UserDTO:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: 使用者代號, 通常是員工編號(8碼數字), 但也有些內建帳號例外
+          nullable: true
+        userName:
+          type: string
+          description: 使用者名稱
+          nullable: true
+        chineseName:
+          type: string
+          description: 中文姓名
+          nullable: true
+        dept:
+          type: string
+          description: 部門代號
+          nullable: true
+        deptName:
+          type: string
+          description: 部門名稱
+          nullable: true
+        title:
+          type: string
+          description: 職稱
+          nullable: true
+        extNo:
+          type: string
+          description: 分機號碼
+          nullable: true
+        password:
+          type: string
+          description: 密碼, 僅在建立或修改密碼時使用, 不會回傳此欄位實際內容改用*號顯示
+          nullable: true
+        notesId:
+          type: string
+          description: Notes 帳號, 實際為AD 帳號(AdId)
+          nullable: true
+        brmRelease:
+          type: string
+          description: BRM 發布權限
+          nullable: true
+        brmSuper:
+          type: string
+          description: BRM 超級使用者
+          nullable: true
+        resetFlg:
+          type: string
+          description: 重置標記
+          nullable: true
+        expireFlg:
+          type: string
+          description: 過期標記
+          nullable: true
+        expireDate:
+          type: string
+          description: 過期日期
+          format: date-time
+          nullable: true
+        cmoUserId:
+          type: string
+          description: CMO 使用者代號
+          nullable: true
+        disableFlg:
+          type: string
+          description: 停用標記
+          nullable: true
+        adminFlag:
+          type: string
+          description: 管理員標記
+          nullable: true
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserGroupDTO'
+          description: 所屬群組列表
+          nullable: true
+      additionalProperties: false
+      description: "UAC 使用者資料 DTO\r\n主鍵：UserId"
+    UserFunctionDTO:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: 使用者代號
+          nullable: true
+        userName:
+          type: string
+          description: 使用者名稱
+          nullable: true
+        dept:
+          type: string
+          description: 部門代號
+          nullable: true
+        functions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupFunctionDTO'
+          description: 功能列表
+          nullable: true
+      additionalProperties: false
+      description: "UAC 使用者資訊含可使用功能列表 DTO\r\n主鍵：UserId"
+    UserGroup:
+      type: object
+      properties:
+        header:
+          type: string
+          nullable: true
+        userId:
+          type: string
+          nullable: true
+        groupId:
+          type: string
+          nullable: true
+        groupName:
+          type: string
+          nullable: true
+        systemSeq:
+          type: integer
+          format: int32
+        userInfo:
+          $ref: '#/components/schemas/User'
+        groupInfo:
+          $ref: '#/components/schemas/Group'
+      additionalProperties: false
+    UserGroupDTO:
+      type: object
+      properties:
+        groupId:
+          type: string
+          description: 群組代號
+          nullable: true
+        groupName:
+          type: string
+          description: 群組名稱
+          nullable: true
+      additionalProperties: false
+      description: "UAC 群組資料 DTO\r\n主鍵：GroupId"
+    UserSimpleDTO:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: 使用者代號, 正常為工號(8碼數字), 但有可能是系統或管理用途帳號
+          nullable: true
+        userName:
+          type: string
+          description: 使用者名稱
+          nullable: true
+        notesId:
+          type: string
+          description: Notes 帳號
+          nullable: true
+        dept:
+          type: string
+          description: 部門代號
+          nullable: true
+      additionalProperties: false
+      description: UAC 使用者簡易資料 DTO
+    VerifyInfo:
+      type: object
+      properties:
+        certificateKey:
+          type: string
+          description: 憑證金鑰
+          nullable: true
+      additionalProperties: false
+      description: 驗證資訊
+    SsoUrlResponse:
+      type: object
+      properties:
+        loginUrl:
+          type: string
+          description: SSO Login URL
+          nullable: true
+        logoutUrl:
+          type: string
+          description: SSO Logout URL
+          nullable: true
+      additionalProperties: false
+      description: SSO URL Response

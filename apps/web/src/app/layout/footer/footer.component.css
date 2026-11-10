@@ -1,0 +1,45 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.app-footer {
+  align-items: center;
+  background-color: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  color: #64748b;
+  display: flex;
+  font-size: 0.75rem;
+  height: 28px;
+  justify-content: space-between;
+  line-height: 1;
+  padding: 0 16px;
+  user-select: none;
+  z-index: 10;
+}
+
+.footer-col {
+  align-items: center;
+  display: flex;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footer-version,
+.bottom-front {
+  font-weight: 500;
+  justify-content: flex-start;
+}
+
+.footer-copyright,
+.bottom-center {
+  color: #94a3b8;
+  justify-content: center;
+}
+
+.footer-owner,
+.bottom-end {
+  font-weight: 500;
+  justify-content: flex-end;
+}

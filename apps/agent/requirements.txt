@@ -1,0 +1,5 @@
+pydantic-ai-slim
+fastapi
+uvicorn
+httpx
+pytest

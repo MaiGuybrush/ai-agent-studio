@@ -1,0 +1,122 @@
+import { Injectable } from '@angular/core';
+import { UserService } from '@inx/inx-auth-lib';
+import { MesApiCommonService, Shop, ShopCategory } from '@inx/mes-api-trx';
+import { of } from 'rxjs';
+import { catchError, concatMap, delay, map, tap } from 'rxjs/operators';
+import { ConfigService } from './config.service';
+import { Store, select } from '@ngrx/store';
+import { AppGlobals } from './app.globals';
+import { changeShop, configShops } from './app.actions';
+import { environment } from 'environments/environment';
+import { ShopConfigState, selectShop } from './app.reducers';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class AppInitService {
+
+  constructor(private configService: ConfigService, private mes: MesApiCommonService,
+    private userService: UserService, private store: Store<{ shopConfigState: ShopConfigState }>) { 
+      AppGlobals.shop$ = store.pipe(select(selectShop), map(s => s ?? {iD: 'unknown'} as Shop));
+  }
+
+  static getShopCategory(shop: string): ShopCategory | null {
+    return AppGlobals.shopMap.get(shop)?.category ?? null;
+  }
+
+  init() {
+    const url = window.location.href;
+    const params: any = new Proxy(new URLSearchParams(window.location.search), {
+      get: (searchParams, prop: string) => searchParams.get(prop),
+    });
+    let certificateKey = params['CertificateKey'];
+    const arr = url.split("/");
+    const urlSite = arr[0] + "//" + arr[2];   
+    console.log("GlobalService.init() called");
+
+    return this.configService.config$
+    .pipe(
+        tap(cfg => {
+          AppGlobals.appConfig = cfg;
+        }),       
+        catchError(err => {
+            console.log("001-read config.json failed!");
+            throw "001-read config.json failed!";
+        }), 
+        concatMap(appCfg => {
+            let apiCfg = appCfg.apiConfig;
+            if (!apiCfg?.mes || !apiCfg?.auth) {
+              alert("002-readConfig failed!")
+              throw "002-readConfig failed!";
+            }
+
+            return this.mes.getShops()
+        }),
+        concatMap(allShops => {
+            if (AppGlobals.appConfig.fabScope && 
+              AppGlobals.appConfig.fabScope.length > 0) {
+                allShops = allShops.filter(n => AppGlobals.appConfig.fabScope.indexOf(n.fab) >= 0)                
+            }
+            AppGlobals.allShops = allShops;
+            this.store.dispatch(configShops({shops: allShops}))
+            return of(true);
+        }),
+        concatMap(() => {    
+          if (certificateKey) {
+            return this.userService.verifyCertificate(certificateKey);
+          }
+          return this.userService.tryAuth(document.location.href.split('#')[0], true);
+        }),  
+        catchError(err => {
+          console.log(`003-auth fail, err=${JSON.stringify(err)}`);
+          return this.userService.logOutObs()
+        }),               
+        concatMap(user => {
+          if (user != null) {
+            let availableShops: Shop[] = ([] as Shop[]).concat(AppGlobals.allShops);
+            if (user.shops?.length > 0) { //
+                if (this.userService.currentUser?.shops) {
+                    let shops = this.userService.currentUser?.shops
+                    availableShops = availableShops
+                        .filter(s => shops.map(us => us.toUpperCase()).indexOf(s.iD.toUpperCase()) >= 0)
+                }
+            }
+            
+            if (!availableShops || availableShops.length == 0) {
+              alert(`initial failed, err=[使用者所屬廠別${JSON.stringify(user.shops)}不適用此應用程式廠別${JSON.stringify(AppGlobals.allShops)}]`);
+            }
+            let targetShop = this.userService.getPreference(environment.appTitle, 'shop');
+            if (!targetShop && user.orgShop) { 
+              targetShop = user.orgShop;
+            }
+
+            if (availableShops.map(s => s.iD).indexOf(targetShop) < 0) {
+              targetShop = availableShops[0].iD;
+            }           
+            const shopMap = new Map<string, Shop>();
+            availableShops.forEach(shop => {
+                shopMap.set(shop.iD, shop);
+            });  
+            AppGlobals.availableShops = availableShops;
+            AppGlobals.shopMap = shopMap;
+            let shop = AppGlobals.shopMap.get(targetShop)
+            if (shop != null) {
+                this.store.dispatch(changeShop({ shop: shop }));
+            }
+
+            return of(true);
+          } else {
+            this.userService.redirectToSso(document.location.href.split('#')[0]);
+            return of(false).pipe(delay(5000));
+          }
+        }),
+        catchError(err => {
+            alert(`initial failed, err=[${JSON.stringify(err)}]`);
+            return of(false);
+        })
+    ).toPromise();
+  }
+
+}
+
+
