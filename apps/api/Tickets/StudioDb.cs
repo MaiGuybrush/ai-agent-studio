@@ -63,6 +63,8 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
 
     public DbSet<AiAgentStudio.Api.Submissions.FeasibilityReview> FeasibilityReviews => Set<AiAgentStudio.Api.Submissions.FeasibilityReview>();
 
+    public DbSet<AiAgentStudio.Api.Submissions.ToolSpecComment> ToolSpecComments => Set<AiAgentStudio.Api.Submissions.ToolSpecComment>();
+    public DbSet<AiAgentStudio.Api.Submissions.ReviewAssignment> ReviewAssignments => Set<AiAgentStudio.Api.Submissions.ReviewAssignment>();
     public DbSet<AiAgentStudio.Api.Notifications.EmailOutbox> EmailOutbox => Set<AiAgentStudio.Api.Notifications.EmailOutbox>();
 
     /// <summary>啟動時清除遺留的「執行中」標記（spec 2.4）；回傳清除筆數。</summary>
@@ -126,6 +128,18 @@ public class StudioDb(DbContextOptions<StudioDb> options) : DbContext(options)
         {
             e.ToTable("feasibility_review");
             e.HasIndex(x => new { x.TicketId, x.SpecId, x.Revision });
+            e.Property(x => x.TicketId).HasMaxLength(64);
+        });
+        b.Entity<AiAgentStudio.Api.Submissions.ToolSpecComment>(e =>
+        {
+            e.ToTable("tool_spec_comment");
+            e.HasIndex(x => new { x.TicketId, x.SpecId });
+            e.Property(x => x.TicketId).HasMaxLength(64);
+        });
+        b.Entity<AiAgentStudio.Api.Submissions.ReviewAssignment>(e =>
+        {
+            e.ToTable("review_assignment");
+            e.HasIndex(x => new { x.TicketId, x.SpecId });
             e.Property(x => x.TicketId).HasMaxLength(64);
         });
         b.Entity<AiAgentStudio.Api.Notifications.EmailOutbox>(e =>
