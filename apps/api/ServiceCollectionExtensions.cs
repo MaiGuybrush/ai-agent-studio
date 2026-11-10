@@ -113,7 +113,7 @@ namespace AiAgentStudio.Api
             // 需求單：PostgreSQL（只有 C# 連線）；連線字串 ConnectionStrings:Studio
             services.AddSingleton<AiAgentStudio.Api.Tickets.IUserDirectory, AiAgentStudio.Api.Tickets.UacUserDirectory>();
             services.AddDbContext<AiAgentStudio.Api.Tickets.StudioDb>(o =>
-                o.UseNpgsql(configuration.GetConnectionString("Studio") ?? "Host=localhost;Port=5432;Database=studio;Username=studio;Password=studio"));
+                o.UseNpgsql(configuration.GetConnectionString("Studio")));
 
             // UAC 呼叫使用具名 HttpClient，逾時由 Authentication:Uac:TimeoutSeconds 控制（預設 10 秒）
             var uacTimeoutSeconds = configuration.GetValue<int?>("Authentication:Uac:TimeoutSeconds") ?? 10;

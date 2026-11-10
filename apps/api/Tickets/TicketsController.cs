@@ -120,6 +120,26 @@ public class TicketsController(ICurrentUserService user, IdentityService identit
         return Ok(View(t, me));
     }
 
+    public record ReassignRequest(string? NewCimEngineerEmpNo, string? Reason);
+
+    /// <summary>改派（spec 3.3）：任何 CIM Engineer、須附原因、不寄通知；不驗證對方部門（等對方登入才判斷）。</summary>
+    [HttpPost("{id}/reassign")]
+    public async Task<IActionResult> Reassign(string id, ReassignRequest req, CancellationToken ct)
+    {
+        if (await WhoAsync(ct) is not { } me || !me.IsCimEngineer) return Forbid();
+        var t = await db.Tickets.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t is null) return NotFound();
+        if (string.IsNullOrWhiteSpace(req.Reason) || string.IsNullOrWhiteSpace(req.NewCimEngineerEmpNo))
+            return Problem("改派須附新負責人工號與原因。", statusCode: 400);
+        var target = await directory.FindAsync(req.NewCimEngineerEmpNo.Trim(), ct);
+        if (target is null) return Problem($"查無工號 {req.NewCimEngineerEmpNo}，無法改派。", statusCode: 422);
+        Log(t, "Reassign", me, t.CimEngineerEmpNo, target.EmpNo, req.Reason.Trim());
+        t.CimEngineerEmpNo = target.EmpNo;
+        t.CimEngineerName = target.Name;
+        await db.SaveChangesAsync(ct);
+        return Ok(View(t, me));
+    }
+
     [HttpGet("{id}")]
     public async Task<IActionResult> Get(string id, CancellationToken ct)
     {
