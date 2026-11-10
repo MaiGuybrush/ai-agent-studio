@@ -34,4 +34,8 @@ def make_readonly_tools(base_url: str, run_token: str, transport: httpx.AsyncBas
         """查別張需求單進行中的 Tool Spec（比對用途、預期工具名稱、系統）。有相似的就提醒 CIM Engineer，由他決定等待或另開 New。"""
         return await call("tool-specs", keyword=keyword)
 
-    return [list_mcp_tools, list_systems, get_requirement_ticket, search_tool_specs]
+    async def naming_check(fields: list[str]):
+        """對欄位名稱做 Naming Check（對照 Tier1Vocabulary）。fields 要列出所有欄位名稱，巢狀的子欄位名稱也要列。每個名稱回傳 pass／rename（附標準名 suggestion）／new（新名詞，只能標記並建議說明，由 CIM Engineer 確認）。"""
+        return await call("naming-check", fields=fields)
+
+    return [list_mcp_tools, list_systems, get_requirement_ticket, search_tool_specs, naming_check]

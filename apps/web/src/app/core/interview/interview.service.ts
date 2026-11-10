@@ -30,6 +30,11 @@ export interface WorkflowDraft {
 }
 
 /** Tool Spec 草稿（#21）：欄位見 spec 6.2；inputs／outputs 為 JSON Schema 子集。 */
+export interface NamingResult {
+  status: 'pass' | 'rename' | 'new';
+  suggestion?: string;
+}
+
 export interface ToolSpec {
   id: string;
   kind?: 'Reuse' | 'Extend' | 'New';
@@ -38,6 +43,8 @@ export interface ToolSpec {
   system_owner?: string;
   side_effect?: 'read' | 'write';
   inputs?: unknown;
+  /** 後端算出：每個欄位（含巢狀）的 Naming Check 結果與詞彙 sha，欄位路徑如 inputs.lots[].state。 */
+  naming_check?: { sha: string; fields: Record<string, NamingResult> };
   outputs?: unknown;
   ref?: { server: string; tool: string; schema_snapshot?: unknown };
   expected_tool_name?: string;
@@ -48,6 +55,8 @@ export interface ToolSpecDraft {
   steps: ToolSpec[]; // 後端與 Workflow 草稿共用 DraftView，欄位名稱沿用 steps
   humanEdits: string[]; // 例如 tool_specs.ts1.purpose
   missing: Record<string, string[]>; // 每份 Tool Spec 還缺的必填欄位
+  vocabulary?: { sha: string; fetchedAt: string; warning?: string | null } | null; // 目前使用的詞彙版本；warning 表示沿用舊版
+  vocabularyError?: string | null; // 完全沒有詞彙時，Naming Check 暫停的原因
 }
 
 @Injectable({ providedIn: 'root' })

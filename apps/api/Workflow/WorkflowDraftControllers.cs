@@ -19,7 +19,7 @@ public record SaveDraftRequest(int Version, JsonArray? Steps);
 [ApiController]
 [Route("api/tickets/{ticketId}")]
 [Authorize]
-public class WorkflowDraftController(ICurrentUserService user, IdentityService identity, StudioDb db, WorkflowDraftService drafts, StudioConfigProvider config) : ControllerBase
+public class WorkflowDraftController(ICurrentUserService user, IdentityService identity, StudioDb db, WorkflowDraftService drafts, StudioConfigProvider config, AiAgentStudio.Api.Vocabulary.ToolSpecNaming naming) : ControllerBase
 {
     async Task<UserIdentity?> WhoAsync(CancellationToken ct)
     {
@@ -41,17 +41,22 @@ public class WorkflowDraftController(ICurrentUserService user, IdentityService i
     [HttpPut("tool-spec-draft")]
     public Task<IActionResult> SaveSpecs(string ticketId, SaveDraftRequest req, CancellationToken ct) => SaveDoc(ticketId, req, WorkflowDraft.ToolSpecsDoc, ct);
 
-    static object Shape(DraftView v, string coll) => coll != WorkflowDraft.ToolSpecsDoc ? v : new
+    /// <summary>Tool Spec 草稿多帶 missing、vocabulary（詞彙 sha、時間、沿用舊版的警告）、vocabularyError（完全沒有詞彙時，Naming Check 暫停）。</summary>
+    static object Shape(DraftView v, string coll, AiAgentStudio.Api.Vocabulary.NamingRefresh? n = null) => coll != WorkflowDraft.ToolSpecsDoc ? v : new
     {
         v.Version, v.Steps, v.HumanEdits,
         Missing = v.Steps.OfType<JsonObject>().ToDictionary(s => s["id"]!.GetValue<string>(), s => ToolSpecRules.Missing(s)),
+        Vocabulary = n?.Vocabulary is { } x ? new { x.Sha, x.FetchedAt, x.Warning } : null,
+        VocabularyError = n?.Error,
     };
 
     async Task<IActionResult> GetDoc(string ticketId, string coll, CancellationToken ct)
     {
         if (await WhoAsync(ct) is not { IsCimEngineer: true }) return Forbid();
         if (!await db.Tickets.AnyAsync(x => x.Id == ticketId, ct)) return NotFound();
-        return Ok(Shape(await drafts.GetAsync(ticketId, coll), coll));
+        // 開啟時重跑 Naming Check（詞彙 sha 落後就會重算）
+        var n = coll == WorkflowDraft.ToolSpecsDoc ? await naming.RefreshAsync(ticketId, ct) : null;
+        return Ok(Shape(await drafts.GetAsync(ticketId, coll), coll, n));
     }
 
     async Task<IActionResult> SaveDoc(string ticketId, SaveDraftRequest req, string coll, CancellationToken ct)
@@ -68,6 +73,11 @@ public class WorkflowDraftController(ICurrentUserService user, IdentityService i
             foreach (var s in req.Steps.OfType<JsonObject>())
                 if (ToolSpecRules.Validate(s, config.Current.Systems.Keys) is { } err) return Problem($"{s["id"]}：{err}", statusCode: 400);
         var r = await drafts.HumanSaveAsync(ticketId, req.Version, req.Steps, coll);
+        if (r.Saved && coll == WorkflowDraft.ToolSpecsDoc)
+        {
+            var n = await naming.RefreshAsync(ticketId, ct);
+            return Ok(Shape(await drafts.GetAsync(ticketId, coll), coll, n));
+        }
         return r.Saved ? Ok(Shape(r.Current, coll)) : Conflict(new { title = "草稿已被更新，請重新載入後再修改。", current = Shape(r.Current, coll) });
     }
 }
