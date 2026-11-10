@@ -19,6 +19,7 @@ from pydantic_ai.messages import ModelMessagesTypeAdapter
 from pydantic_ai.models import Model
 
 from app.config import Config, load_config
+from app.tools import make_readonly_tools
 
 INSTRUCTIONS = (Path(__file__).parent / "instructions.md").read_text(encoding="utf-8")
 
@@ -27,7 +28,7 @@ class RunRequest(BaseModel):
     run_id: str
     messages: list[dict]  # pydantic-ai ModelMessage 的 JSON 形式，最後一則是使用者剛送出的訊息
     opening_context: str = ""
-    run_token: str = ""  # 呼叫 C# tool API 用
+    run_token: str = ""  # 呼叫 C# tool API 用（X-Run-Token）
     tool_api_base_url: str = ""
     draft: dict | None = None  # 回合開始時的最新 Workflow Definition 草稿
     draft_diff: list[dict] = []  # 自 agent 上次看過後，CIM Engineer 的人工修改
@@ -96,7 +97,7 @@ def build_model(cfg: Config) -> Model | None:
     return OpenAIChatModel(cfg.model_name, provider=OpenAIProvider(base_url=cfg.model_base_url, api_key=cfg.model_api_key))
 
 
-def create_app(model: Model | None = None, api_key: str | None = None, http_transport: httpx.AsyncBaseTransport | None = None) -> FastAPI:
+def create_app(model: Model | None = None, api_key: str | None = None, tool_transport: httpx.AsyncBaseTransport | None = None) -> FastAPI:
     cfg = load_config()
     model = model or build_model(cfg)
     api_key = cfg.api_key if api_key is None else api_key
@@ -116,14 +117,15 @@ def create_app(model: Model | None = None, api_key: str | None = None, http_tran
         if model is None:
             raise HTTPException(503, "model not configured")
         history = ModelMessagesTypeAdapter.validate_python(req.messages)
-        agent = Agent(model, instructions=INSTRUCTIONS, deps_type=Deps, tools=[upsert_workflow_step, delete_workflow_step])
+        agent = Agent(model, instructions=INSTRUCTIONS, deps_type=Deps,
+                      tools=[*make_readonly_tools(req.tool_api_base_url, req.run_token, tool_transport), upsert_workflow_step, delete_workflow_step])
         q: asyncio.Queue[str | None] = asyncio.Queue()
 
         async def drive() -> None:
             try:
                 async with agent.run_stream(
                     None, message_history=history, instructions=draft_context(req),
-                    deps=Deps(req.run_token, req.tool_api_base_url, http_transport),
+                    deps=Deps(req.run_token, req.tool_api_base_url, tool_transport),
                 ) as result:
                     async for delta in result.stream_text(delta=True):
                         await q.put(sse("text", {"text": delta}))

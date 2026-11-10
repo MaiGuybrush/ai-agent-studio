@@ -94,3 +94,67 @@ def test_cancel_running_run_ends_with_cancelled_error_event():
     t.join(5)
     assert not t.is_alive()
     assert got[-1][0] == "error" and got[-1][1]["code"] == "cancelled"
+
+
+def test_agent_gets_three_readonly_tools_that_forward_to_csharp_with_run_token():
+    import httpx
+
+    seen = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append((str(req.url), req.headers.get("x-run-token")))
+        return httpx.Response(200, json={"path": req.url.path})
+
+    c = TestClient(create_app(model=TestModel(custom_output_text="好", call_tools=["list_mcp_tools", "list_systems", "get_requirement_ticket"]), api_key="k", tool_transport=httpx.MockTransport(handler)))  # #20 起還有草稿工具，這裡只驗唯讀三個
+    with c.stream("POST", "/runs", json=body(), headers=KEY) as r:
+        evs = events(r)
+    assert evs[-1][0] == "done", evs[-1]
+    # TestModel 會呼叫所有已註冊的工具；只有這三個，全部帶 run token 打到 C# 的 tool API
+    assert sorted(u for u, _ in seen) == [
+        "http://127.0.0.1:5080/internal/tools/mcp-tools",
+        "http://127.0.0.1:5080/internal/tools/requirement-ticket",
+        "http://127.0.0.1:5080/internal/tools/systems",
+    ]
+    assert {t for _, t in seen} == {"tok"}
+    tool_names = {p["tool_name"] for m in evs[-1][1]["messages"] for p in m["parts"] if p["part_kind"] == "tool-call"}
+    assert tool_names == {"list_mcp_tools", "list_systems", "get_requirement_ticket"}
+
+
+def test_tool_http_error_does_not_crash_the_run():
+    import httpx
+
+    c = TestClient(create_app(model=TestModel(custom_output_text="好"), api_key="k",
+                              tool_transport=httpx.MockTransport(lambda req: httpx.Response(401))))
+    with c.stream("POST", "/runs", json=body(), headers=KEY) as r:
+        evs = events(r)
+    assert evs[-1][0] == "done", evs[-1]
+
+
+def test_model_429_becomes_model_busy_error_event():
+    from pydantic_ai.exceptions import ModelHTTPError
+
+    async def limited(messages, info: AgentInfo):
+        raise ModelHTTPError(429, "test", {"error": "rate limit"})
+        yield "x"
+
+    with client(FunctionModel(stream_function=limited)).stream("POST", "/runs", json=body(), headers=KEY) as r:
+        evs = events(r)
+    assert evs[-1][0] == "error" and evs[-1][1]["code"] == "model_busy"
+
+
+def test_client_disconnect_aborts_the_run():
+    stopped = threading.Event()
+
+    async def slow(messages, info: AgentInfo):
+        yield "開始"
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            stopped.set()
+            raise
+        yield "不會到"
+
+    c = client(FunctionModel(stream_function=slow))
+    with c.stream("POST", "/runs", json=body("r10"), headers=KEY) as r:
+        next(r.iter_lines())  # 收到第一行後直接斷線
+    assert stopped.wait(5)

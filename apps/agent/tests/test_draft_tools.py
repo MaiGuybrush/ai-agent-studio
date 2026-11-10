@@ -55,7 +55,7 @@ def test_draft_tools_forward_to_csharp_with_run_token_and_return_rejection_to_mo
         tool_returns.extend(p.content for p in returns)
         yield "好"
 
-    app = create_app(model=FunctionModel(stream_function=script), api_key="k", http_transport=httpx.MockTransport(handler))
+    app = create_app(model=FunctionModel(stream_function=script), api_key="k", tool_transport=httpx.MockTransport(handler))
     with TestClient(app).stream("POST", "/runs", json=body(), headers=KEY) as r:
         evs = events(r)
     assert evs[-1][0] == "done", evs[-1]
