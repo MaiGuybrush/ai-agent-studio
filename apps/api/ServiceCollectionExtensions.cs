@@ -122,6 +122,12 @@ namespace AiAgentStudio.Api
             services.AddSingleton<AiAgentStudio.Api.Interviews.IAgentClient, AiAgentStudio.Api.Interviews.HttpAgentClient>();
             services.AddSingleton<AiAgentStudio.Api.Interviews.InterviewRunner>();
 
+            // 系統設定檔與 MCP 工具列舉（spec 4、4.1）；路徑 Studio:ConfigPath，預設 content root 下的 studio.config.json
+            services.AddSingleton(sp => new AiAgentStudio.Api.Studio.StudioConfigProvider(System.IO.Path.GetFullPath(
+                configuration["Studio:ConfigPath"] ?? "studio.config.json", sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>().ContentRootPath)));
+            services.AddSingleton<AiAgentStudio.Api.Studio.IMcpTransportFactory, AiAgentStudio.Api.Studio.McpTransportFactory>();
+            services.AddSingleton<AiAgentStudio.Api.Studio.McpToolCatalog>();
+
             // UAC 呼叫使用具名 HttpClient，逾時由 Authentication:Uac:TimeoutSeconds 控制（預設 10 秒）
             var uacTimeoutSeconds = configuration.GetValue<int?>("Authentication:Uac:TimeoutSeconds") ?? 10;
             if (uacTimeoutSeconds <= 0)

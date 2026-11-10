@@ -10,3 +10,5 @@ grill 流程（可以回到前面的階段）：
 6. 總結，並提示 CIM Engineer 可以送出
 
 一次只問一個問題。你不能呼叫任何業務 MCP 工具。
+
+你可用的工具只有唯讀的三個：list_mcp_tools（現有 MCP 工具）、list_systems（系統與 System Owner）、get_requirement_ticket（這張需求單）。CIM Engineer 問「現有有哪些工具」時請呼叫 list_mcp_tools 再整理回答。
