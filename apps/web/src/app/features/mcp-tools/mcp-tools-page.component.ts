@@ -2,6 +2,16 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { McpServer, McpTool, McpToolsService } from '../../core/mcp-tools/mcp-tools.service';
 import { McpToolDetailComponent } from './mcp-tool-detail.component';
 
+/** 遞迴收集 schema 所有屬性名稱（含巢狀 properties／items）。 */
+const fieldNames = (schema: unknown): string[] => {
+  if (!schema || typeof schema !== 'object') return [];
+  const s = schema as { properties?: Record<string, unknown>; items?: unknown };
+  return [
+    ...Object.entries(s.properties ?? {}).flatMap(([k, v]) => [k, ...fieldNames(v)]),
+    ...fieldNames(s.items),
+  ];
+};
+
 const byName = (a: McpTool, b: McpTool) =>
   a.name.toLowerCase().localeCompare(b.name.toLowerCase());
 
@@ -21,7 +31,12 @@ const byName = (a: McpTool, b: McpTool) =>
           <div class="flex gap-4">
             <!-- 左側清單（#43 搜尋框加在這個區塊頂端） -->
             <nav class="list w-80 shrink-0 space-y-4">
-              @for (s of list; track s.id) {
+              <input type="search" class="search w-full border rounded px-2 py-1" placeholder="搜尋工具、欄位…"
+                [value]="query()" (input)="query.set($any($event.target).value)" />
+              @if (query().trim() && visible().length === 0) {
+                <p class="no-results text-sm text-slate-500">找不到符合「{{ query().trim() }}」的工具。</p>
+              }
+              @for (s of visible(); track s.id) {
                 <section class="server">
                   <h2 class="server-title font-semibold">{{ s.id }}</h2>
                   @if (s.error) {
@@ -55,6 +70,23 @@ export class McpToolsPageComponent {
   /** 已依工具名稱（不分大小寫）排序；server 維持後端給的設定檔順序。 */
   readonly servers = signal<McpServer[] | null>(null);
   readonly error = signal<string | null>(null);
+  readonly query = signal('');
+  /** 依搜尋字串過濾；無符合工具的 server 整組收起。 */
+  readonly visible = computed(() => {
+    const list = this.servers() ?? [];
+    const q = this.query().trim().toLowerCase();
+    if (!q) return list;
+    const has = (x: string) => x.toLowerCase().includes(q);
+    return list
+      .map((s) => ({
+        ...s,
+        tools: has(s.id)
+          ? s.tools
+          : s.tools.filter((t) =>
+              [t.name, t.description ?? '', ...fieldNames(t.inputSchema), ...fieldNames(t.outputSchema)].some(has)),
+      }))
+      .filter((s) => s.tools.length > 0);
+  });
   readonly selected = signal<McpTool | null>(null);
 
   constructor() {
