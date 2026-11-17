@@ -3,9 +3,10 @@
 // 另提供 HR（欄位名稱為推測，spec 第 14 節待確認，見 issue #15 留言）：
 //   GET /HrEmployee/{empNo}?includeDept=true  需使用者 JWT，只能查自己 → { empNo, empName, adId, deptCode, deptName }
 //   GET /HrEmployee/{empNo}/basic-info        免認證                   → { empNo, empName, adId }
+//   /api-keys（GET、POST）、/api-keys/{id}（DELETE）、/api-keys/systems（GET）：Personal API Key，需使用者 JWT
 // 使用者清單見 tools/mock-users.json。
 import { createServer } from 'node:http';
-import { generateKeyPairSync, createSign, createVerify } from 'node:crypto';
+import { generateKeyPairSync, createSign, createVerify, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 const port = Number(process.argv[2] || 5090);
@@ -36,6 +37,10 @@ const login = key => {
   return users.some(u => u.EmpNo === empNo) ? { token: jwt(empNo), refreshToken: `mock-${empNo}` } : null;
 };
 
+// Personal API Key（spec §12.1）：記憶體實作；重啟即清空。DELETE 直接移除，等同「已撤銷不回傳」。
+const systems = ['MES', 'EAP', 'RMS', 'SPC', 'YMS', '*'];
+const apiKeys = [];
+
 const json = (res, status, body) => res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
 const body = req => new Promise(r => { let s = ''; req.on('data', c => s += c).on('end', () => r(s ? JSON.parse(s) : {})); });
 
@@ -58,6 +63,29 @@ createServer(async (req, res) => {
       return `<li><a href="${to.href.replace(/&/g, '&amp;')}">${u.Name}（${u.DeptCode ?? '無部門'}，${u.EmpNo}）</a></li>`;
     });
     return res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(`<meta charset="utf-8"><h3>Mock UAC：選擇登入身分</h3><ul>${rows.join('')}</ul>`);
+  }
+  const ak = url.pathname.match(/^\/api-keys(?:\/([^/]+))?\/?$/);
+  if (ak) {
+    const caller = verify(req.headers.authorization);
+    if (!caller) return json(res, 401, { error: 'invalid token' });
+    const id = ak[1] && decodeURIComponent(ak[1]);
+    if (req.method === 'GET' && id === 'systems') return json(res, 200, systems);
+    if (req.method === 'GET' && !id) return json(res, 200, apiKeys.filter(k => k.empId === caller));
+    if (req.method === 'POST' && !id) {
+      const { label, scopes, expiresAt } = await body(req);
+      const ok = Array.isArray(scopes) && scopes.length > 0 && scopes.every(s => systems.includes(s)) && (!scopes.includes('*') || scopes.length === 1);
+      if (!label || !ok) return json(res, 400, { error: 'label required; scopes must be known systems, and * cannot be combined' });
+      const fullKey = `uak_${randomBytes(24).toString('hex')}`;
+      const k = { id: randomUUID(), empId: caller, keyPrefix: fullKey.slice(0, 8), label, scopes, expiresAt: expiresAt ?? null, createdAt: new Date().toISOString(), lastUsedAt: null };
+      apiKeys.push(k);
+      return json(res, 201, { ...k, fullKey });
+    }
+    if (req.method === 'DELETE' && id) {
+      const i = apiKeys.findIndex(k => k.id === id && k.empId === caller);
+      if (i < 0) return json(res, 404, { error: 'not found' });
+      apiKeys.splice(i, 1);
+      return res.writeHead(204).end();
+    }
   }
   const hr = req.method === 'GET' && url.pathname.match(/^\/HrEmployee\/([^/]+?)(\/basic-info)?\/?$/);
   if (hr) {
