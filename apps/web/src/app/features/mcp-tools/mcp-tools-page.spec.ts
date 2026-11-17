@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { McpToolsPageComponent } from './mcp-tools-page.component';
@@ -15,7 +16,7 @@ describe('McpToolsPageComponent', () => {
     TestBed.configureTestingModule({
       imports: [McpToolsPageComponent],
       providers: [
-        provideHttpClient(), provideHttpClientTesting(),
+        provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
         { provide: ConfigService, useValue: { normalizeUrl: (u: string) => u, config: () => ({ apiBaseUrl: 'http://api' }) } },
       ],
     });
@@ -124,6 +125,58 @@ describe('McpToolsPageComponent', () => {
       expect(root().querySelector('.tool')?.textContent?.trim()).toBe('old');
       expect(root().querySelector('.refresh-error')).toBeTruthy();
       expect((root().querySelector('.refresh') as HTMLButtonElement).disabled).toBe(false);
+    });
+  });
+
+  describe('search', () => {
+    const load = () => {
+      const { fixture, req, root } = setup();
+      req.flush({ servers: [
+        server('Gateway', [
+          tool('Gateway', 'getLot', { description: 'Fetch WIP', inputSchema: { type: 'object', properties: { filter: { type: 'object', properties: { lotId: { type: 'string' } } } } } }),
+          tool('Gateway', 'ping', { outputSchema: { properties: { Status: { type: 'string' } } } }),
+        ]),
+        server('down', [], 'timeout'),
+        server('other', [tool('other', 'noop')]),
+      ] });
+      fixture.detectChanges();
+      const search = (q: string) => {
+        const el = root().querySelector('input.search') as HTMLInputElement;
+        el.value = q;
+        el.dispatchEvent(new Event('input'));
+        fixture.detectChanges();
+      };
+      const tools = () => [...root().querySelectorAll('.tool')].map((e) => e.textContent?.trim());
+      const servers = () => [...root().querySelectorAll('.server-title')].map((e) => e.textContent?.trim());
+      return { search, tools, servers, root };
+    };
+
+    it.each([
+      ['gateway', ['getLot', 'ping']], // server id，不分大小寫
+      ['GETL', ['getLot']], // tool name 子字串
+      ['wip', ['getLot']], // description
+      ['lotid', ['getLot']], // 巢狀 input 欄位
+      ['status', ['ping']], // output 欄位
+    ])('matches %s', (q, expected) => {
+      const { search, tools } = load();
+      search(q);
+      expect(tools()).toEqual(expected);
+    });
+
+    it('collapses servers without matching tools, including failed ones', () => {
+      const { search, servers } = load();
+      search('lotId');
+      expect(servers()).toEqual(['Gateway']);
+    });
+
+    it('shows no-result message and restores on clear', () => {
+      const { search, tools, servers, root } = load();
+      search('zzz');
+      expect(root().querySelector('.no-results')?.textContent).toContain('zzz');
+      search('');
+      expect(root().querySelector('.no-results')).toBeNull();
+      expect(tools().length).toBe(3);
+      expect(servers()).toEqual(['Gateway', 'down', 'other']);
     });
   });
 });
