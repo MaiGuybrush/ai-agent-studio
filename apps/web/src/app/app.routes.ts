@@ -29,6 +29,7 @@ export const routes: Routes = [
   { path: 'reviews', component: ReviewPendingComponent, canActivate: [authGuard] },
   { path: 'reviews/:ticketId/:specId', component: ReviewPageComponent, canActivate: [authGuard] },
   { path: 'mcp-tools', component: McpToolsPageComponent, canActivate: [authGuard] },
+  { path: 'mcp-tools/:server/:tool', component: McpToolsPageComponent, canActivate: [authGuard] },
   { path: 'settings/api-keys', component: ApiKeysPageComponent, canActivate: [authGuard] },
   {
     path: '**',

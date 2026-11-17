@@ -1,4 +1,7 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
+import { map } from 'rxjs';
 import { McpServer, McpTool, McpToolsService } from '../../core/mcp-tools/mcp-tools.service';
 import { McpToolDetailComponent } from './mcp-tool-detail.component';
 
@@ -33,7 +36,7 @@ const byName = (a: McpTool, b: McpTool) =>
                     @for (t of s.tools; track t.qualifiedName) {
                       <li>
                         <button type="button" class="tool w-full text-left px-2 py-1 rounded hover:bg-slate-100"
-                          [class.bg-blue-100]="selected() === t" (click)="selected.set(t)">{{ t.name }}</button>
+                          [class.bg-blue-100]="selected() === t" (click)="pick(s, t)">{{ t.name }}</button>
                       </li>
                     }
                   </ul>
@@ -41,7 +44,13 @@ const byName = (a: McpTool, b: McpTool) =>
               }
             </nav>
             <!-- 右側詳情 -->
-            <div class="detail flex-1"><app-mcp-tool-detail [tool]="selected()" /></div>
+            <div class="detail flex-1">
+              @if (notFound()) {
+                <p class="not-found text-sm text-red-600">找不到指定的 MCP 工具。</p>
+              } @else {
+                <app-mcp-tool-detail [tool]="selected()" />
+              }
+            </div>
           </div>
         }
       } @else {
@@ -57,7 +66,31 @@ export class McpToolsPageComponent {
   readonly error = signal<string | null>(null);
   readonly selected = signal<McpTool | null>(null);
 
+  private readonly router = inject(Router);
+  /** 深連結 `/mcp-tools/:server/:tool` 的參數；沒有則為 null。 */
+  private readonly target = toSignal(
+    inject(ActivatedRoute).paramMap.pipe(
+      map((p) => (p.get('server') && p.get('tool') ? { server: p.get('server')!, tool: p.get('tool')! } : null)),
+    ),
+    { initialValue: null },
+  );
+  private readonly match = computed(() => {
+    const t = this.target();
+    const s = this.servers()?.find((x) => x.id === t?.server);
+    return s?.tools.find((x) => x.name === t?.tool) ?? null;
+  });
+  readonly notFound = computed(() => this.target() !== null && this.servers() !== null && this.match() === null);
+
+  pick(s: McpServer, t: McpTool) {
+    this.selected.set(t);
+    this.router.navigate(['/mcp-tools', s.id, t.name]).catch(() => {});
+  }
+
   constructor() {
+    effect(() => {
+      const m = this.match();
+      if (m) this.selected.set(m);
+    });
     this.svc.list().subscribe({
       next: (r) =>
         this.servers.set(r.servers.map((s) => ({ ...s, tools: [...s.tools].sort(byName) }))),
