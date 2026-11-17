@@ -20,15 +20,21 @@ public class McpToolCatalogTests : IDisposable
     /// <summary>每個 server id 一組假工具；記錄建立連線的次數與收到的設定。</summary>
     public class FakeServers(Dictionary<string, Tool[]> tools) : IMcpTransportFactory
     {
+        /// <summary>列舉工具時刻意卡住（不回應）的 server id。</summary>
+        public HashSet<string> Hang = [];
         public List<(string Id, McpServerConfig Cfg)> Connections = [];
 
         public IClientTransport Create(string serverId, McpServerConfig cfg)
         {
             Connections.Add((serverId, cfg));
-            if (!tools.TryGetValue(serverId, out var t)) throw new InvalidOperationException("連線失敗");
+            if (!tools.TryGetValue(serverId, out var t)) throw new InvalidOperationException($"連線失敗 {cfg.Url} {cfg.Command} {string.Join(' ', cfg.Args)}");
             Pipe c2s = new(), s2c = new();
             var server = McpServer.Create(new StreamServerTransport(c2s.Reader.AsStream(), s2c.Writer.AsStream()),
-                new McpServerOptions { Handlers = new() { ListToolsHandler = (_, _) => ValueTask.FromResult(new ListToolsResult { Tools = [.. t] }) } });
+                new McpServerOptions { Handlers = new() { ListToolsHandler = async (_, ct) =>
+                {
+                    if (Hang.Contains(serverId)) await Task.Delay(Timeout.Infinite, ct);
+                    return new ListToolsResult { Tools = [.. t] };
+                } } });
             _ = server.RunAsync();
             return new StreamClientTransport(c2s.Writer.AsStream(), s2c.Reader.AsStream());
         }

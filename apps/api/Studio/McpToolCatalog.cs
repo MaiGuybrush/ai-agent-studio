@@ -16,7 +16,7 @@ public sealed record McpToolInfo(
     JsonElement InputSchema, JsonElement? OutputSchema, ToolAnnotations? Annotations);
 
 /// <summary>一個 server 的列舉結果；連不上時 Error 有值、Tools 為空，不影響其他 server。</summary>
-public sealed record McpServerTools(string Server, IReadOnlyList<McpToolInfo> Tools, string? Error);
+public sealed record McpServerTools(string Server, string Type, IReadOnlyList<McpToolInfo> Tools, string? Error, DateTimeOffset? FetchedAt, bool TimedOut = false);
 
 /// <summary>依設定建立 SDK 的 transport；獨立出來讓測試換成記憶體內的假 server。</summary>
 public interface IMcpTransportFactory
@@ -49,14 +49,14 @@ public sealed class McpTransportFactory : IMcpTransportFactory
 public sealed class McpToolCatalog(StudioConfigProvider config, IMcpTransportFactory transports, TimeProvider time)
 {
     public static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
+    /// <summary>單一 server 連線＋列舉的上限；逾時視同連不上（測試可調短）。</summary>
+    public TimeSpan ServerTimeout { get; set; } = TimeSpan.FromSeconds(10);
     readonly ConcurrentDictionary<string, (DateTimeOffset At, McpServerTools Result)> cache = new();
 
-    public async Task<IReadOnlyList<McpServerTools>> ListAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<McpServerTools>> ListAsync(CancellationToken ct = default, bool refresh = false)
     {
-        var result = new List<McpServerTools>();
-        // ponytail: 依序列舉；server 很多或很慢時再改平行
-        foreach (var (id, cfg) in config.Current.McpServers) result.Add(await ListServerAsync(id, cfg, ct));
-        return result;
+        // 平行列舉；Task.WhenAll 依輸入順序回傳，維持設定檔順序
+        return await Task.WhenAll(config.Current.McpServers.Select(s => ListServerAsync(s.Key, s.Value, ct, refresh)));
     }
 
     /// <summary>單一 server 的最新工具清單：略過快取直接重新列舉（結果會更新快取）。找不到該 server 設定回 null。供實作檢查用（spec 6.4）。</summary>
@@ -71,19 +71,23 @@ public sealed class McpToolCatalog(StudioConfigProvider config, IMcpTransportFac
         if (!fresh && cache.TryGetValue(key, out var hit) && time.GetUtcNow() - hit.At < Ttl) return hit.Result;
 
         McpServerTools r;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(ServerTimeout);
         try
         {
-            await using var client = await McpClient.CreateAsync(transports.Create(id, cfg), cancellationToken: ct);
-            var tools = await client.ListToolsAsync(cancellationToken: ct);
-            r = new McpServerTools(id, [.. tools.Select(t => new McpToolInfo(
+            await using var client = await McpClient.CreateAsync(transports.Create(id, cfg), cancellationToken: timeout.Token);
+            var tools = await client.ListToolsAsync(cancellationToken: timeout.Token);
+            r = new McpServerTools(id, cfg.Type, [.. tools.Select(t => new McpToolInfo(
                 id, t.Name, $"{id}__{t.Name}", t.Description, t.ProtocolTool.InputSchema,
-                t.ProtocolTool.OutputSchema, t.ProtocolTool.Annotations))], null);
+                t.ProtocolTool.OutputSchema, t.ProtocolTool.Annotations))], null, time.GetUtcNow());
         }
-        catch (Exception e) when (e is not OperationCanceledException)
+        catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            return new McpServerTools(id, [], e.Message); // 失敗不進快取，下次再試
+            var timedOut = e is OperationCanceledException;
+            if (timedOut) e = new TimeoutException($"列舉逾時（{ServerTimeout.TotalSeconds:0.#} 秒）");
+            return new McpServerTools(id, cfg.Type, [], e.Message, null, timedOut); // 失敗不進快取，下次再試
         }
-        cache[key] = (time.GetUtcNow(), r);
+        cache[key] = (r.FetchedAt!.Value, r);
         return r;
     }
 }
