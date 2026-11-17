@@ -19,7 +19,7 @@ export interface ApiKey {
 /** POST /api-keys 回應；fullKey 僅此一次。 */
 export type CreatedApiKey = ApiKey & { fullKey: string };
 
-/** 瀏覽器直連 UAC（JWT 由 JwtInterceptor 加上），不經 C#。#36/#37 在此加 create/revoke/systems。 */
+/** 瀏覽器直連 UAC（JWT 由 JwtInterceptor 加上），不經 C#。 */
 @Injectable({ providedIn: 'root' })
 export class ApiKeysService {
   private readonly http = inject(HttpClient);

@@ -75,6 +75,11 @@ test('POST rejects * mixed with other scopes, unknown scope, empty scopes', asyn
   for (const scopes of [['*', sys], ['no-such-system'], []]) assert.equal((await create(t, { label: 'x', scopes, expiresAt: null })).status, 400);
   assert.equal((await create(t, { label: 'x', scopes: [sys], expiresAt: null })).status, 201);
 });
+test('POST rejects label longer than 50 chars', async () => {
+  const t = await tokenOf('10000001');
+  assert.equal((await create(t, { label: 'x'.repeat(51), scopes: ['*'], expiresAt: null })).status, 400);
+  assert.equal((await create(t, { label: 'x'.repeat(50), scopes: ['*'], expiresAt: null })).status, 201);
+});
 test("GET and DELETE only touch the caller's own keys", async () => {
   const a = await tokenOf('10000001'), b = await tokenOf('10000002');
   const k = await (await create(a)).json();

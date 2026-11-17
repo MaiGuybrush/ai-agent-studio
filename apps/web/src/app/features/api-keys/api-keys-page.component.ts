@@ -166,7 +166,7 @@ export class ApiKeysPageComponent {
 
   private load() {
     this.api.list().subscribe({
-      next: (l) => this.keys.set(l),
+      next: (l) => { this.keys.set(l); this.error.set(null); },
       error: () => this.error.set('無法載入 API Key 列表，請稍後再試。'),
     });
   }
@@ -192,7 +192,7 @@ export class ApiKeysPageComponent {
     const e = this.expiry();
     const expiresAt =
       e === 'none' ? null
-      : e === 'custom' ? new Date(this.customDate()).toISOString()
+      : e === 'custom' ? new Date(`${this.customDate()}T23:59:59.999`).toISOString()
       : new Date(Date.now() + Number(e) * 86400000).toISOString();
     this.busy.set(true);
     this.formError.set(null);

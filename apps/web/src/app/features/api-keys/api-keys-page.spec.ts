@@ -59,6 +59,17 @@ describe('ApiKeysPageComponent', () => {
     expect(root().querySelector('.error')?.textContent).toContain('無法載入');
   });
 
+  it('clears a stale load error once a later load succeeds', () => {
+    const { fixture, req, root } = setup();
+    req.flush('x', { status: 500, statusText: 'err' });
+    fixture.detectChanges();
+    fixture.componentInstance.closeKey();
+    TestBed.inject(HttpTestingController).expectOne('http://uac/auth/api-keys').flush([]);
+    fixture.detectChanges();
+    expect(root().querySelector('.error')).toBeNull();
+    expect(root().querySelector('.empty')).toBeTruthy();
+  });
+
   describe('revoke', () => {
     function withKeys() {
       const s = setup();
@@ -181,7 +192,7 @@ describe('ApiKeysPageComponent', () => {
       type('input.custom-date', '2030-05-01');
       click('button.submit');
       r = http.expectOne(BASE);
-      expect(r.request.body.expiresAt).toContain('2030-05-0');
+      expect(r.request.body.expiresAt).toBe(new Date('2030-05-01T23:59:59.999').toISOString());
       r.flush('x', { status: 400, statusText: 'bad' });
 
       q<HTMLSelectElement>('select.expiry').value = 'none';

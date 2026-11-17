@@ -74,7 +74,7 @@ createServer(async (req, res) => {
     if (req.method === 'POST' && !id) {
       const { label, scopes, expiresAt } = await body(req);
       const ok = Array.isArray(scopes) && scopes.length > 0 && scopes.every(s => systems.includes(s)) && (!scopes.includes('*') || scopes.length === 1);
-      if (!label || !ok) return json(res, 400, { error: 'label required; scopes must be known systems, and * cannot be combined' });
+      if (!label || String(label).length > 50 || !ok) return json(res, 400, { error: 'label required (max 50 chars); scopes must be known systems, and * cannot be combined' });
       const fullKey = `uak_${randomBytes(24).toString('hex')}`;
       const k = { id: randomUUID(), empId: caller, keyPrefix: fullKey.slice(0, 8), label, scopes, expiresAt: expiresAt ?? null, createdAt: new Date().toISOString(), lastUsedAt: null };
       apiKeys.push(k);
