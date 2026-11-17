@@ -23,6 +23,11 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
     route: '/reviews',
     icon: 'tickets',
   },
+  {
+    label: 'MCP 工具 / Tool Catalog',
+    route: '/mcp-tools',
+    icon: 'tickets',
+  },
 ];
 
 @Component({

@@ -9,6 +9,8 @@ import { ReviewPendingComponent } from './features/reviews/review-pending.compon
 import { ReviewPageComponent } from './features/reviews/review-page.component';
 import { ApiKeysPageComponent } from './features/api-keys/api-keys-page.component';
 
+import { McpToolsPageComponent } from './features/mcp-tools/mcp-tools-page.component';
+
 export const routes: Routes = [
   {
     path: '',
@@ -26,6 +28,7 @@ export const routes: Routes = [
   { path: 'tickets/:id/interview', component: InterviewPageComponent, canActivate: [authGuard] },
   { path: 'reviews', component: ReviewPendingComponent, canActivate: [authGuard] },
   { path: 'reviews/:ticketId/:specId', component: ReviewPageComponent, canActivate: [authGuard] },
+  { path: 'mcp-tools', component: McpToolsPageComponent, canActivate: [authGuard] },
   { path: 'settings/api-keys', component: ApiKeysPageComponent, canActivate: [authGuard] },
   {
     path: '**',
