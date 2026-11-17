@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mock-mcp": { "type": "stdio", "command": "node", "args": ["tools/mock-mcp.mjs"] },
+    "mock-unreachable": { "type": "http", "url": "http://localhost:1/mcp" }
+  },
+  "systems": {},
+  "cimDeptCodes": []
+}
