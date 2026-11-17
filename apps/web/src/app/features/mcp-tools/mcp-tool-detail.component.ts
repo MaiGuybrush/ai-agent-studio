@@ -31,7 +31,9 @@ import { McpSchemaViewComponent } from './mcp-schema-view.component';
 export class McpToolDetailComponent {
   readonly tool = input<McpTool | null>(null);
   readonly annotations = computed(() =>
-    Object.entries(this.tool()?.annotations ?? {}).map(([k, v]) => `${k}: ${v}`),
+    Object.entries(this.tool()?.annotations ?? {})
+      .filter(([, v]) => v !== false && v != null)
+      .map(([k, v]) => `${k}: ${v}`),
   );
 
   copyName(name: string) {

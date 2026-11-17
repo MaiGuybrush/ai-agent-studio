@@ -9,7 +9,7 @@ import { McpServer, McpTool } from '../../core/mcp-tools/mcp-tools.service';
 const tool = (server: string, name: string, o: Partial<McpTool> = {}): McpTool => ({
   name, qualifiedName: `${server}__${name}`, description: null, inputSchema: {}, outputSchema: null, annotations: null, ...o,
 });
-const server = (id: string, tools: McpTool[] = [], error: string | null = null, fetchedAt = '2026-01-01T03:07:00Z'): McpServer => ({ id, type: 'http', fetchedAt, error, tools });
+const server = (id: string, tools: McpTool[] = [], error: string | null = null, fetchedAt: string | null = '2026-01-01T03:07:00Z'): McpServer => ({ id, type: 'http', fetchedAt, error, tools });
 
 describe('McpToolsPageComponent', () => {
   function setup() {
@@ -92,6 +92,14 @@ describe('McpToolsPageComponent', () => {
       fixture.detectChanges();
       const times = [...root().querySelectorAll('.server .fetched-at')].map((e) => e.textContent?.trim());
       expect(times).toEqual([`更新於 ${hhmm('2026-01-01T03:07:00Z')}`, `更新於 ${hhmm('2026-01-01T09:45:00Z')}`]);
+    });
+
+    it('does not show 更新於 for a failed server (fetchedAt null)', () => {
+      const { fixture, req, root } = setup();
+      req.flush({ servers: [server('down', [], '無法連線', null)] });
+      fixture.detectChanges();
+      expect(root().querySelector('.server-error')?.textContent).toContain('無法連線');
+      expect(root().querySelector('.fetched-at')).toBeNull();
     });
 
     it('refresh button refetches with refresh=true, shows busy state, then updates the view and time', () => {

@@ -8,7 +8,6 @@ import { InterviewPageComponent } from './features/interview/interview-page.comp
 import { ReviewPendingComponent } from './features/reviews/review-pending.component';
 import { ReviewPageComponent } from './features/reviews/review-page.component';
 import { ApiKeysPageComponent } from './features/api-keys/api-keys-page.component';
-
 import { McpToolsPageComponent } from './features/mcp-tools/mcp-tools-page.component';
 
 export const routes: Routes = [

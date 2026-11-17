@@ -99,7 +99,8 @@ public class McpToolsEndpointTests : IDisposable
 
         var down = servers[1];
         Assert.Equal("stdio", down.GetProperty("type").GetString());
-        Assert.False(string.IsNullOrWhiteSpace(down.GetProperty("error").GetString()));
+        Assert.Equal("無法連線", down.GetProperty("error").GetString()); // 例外訊息含 command/args，不外洩
+        Assert.Equal(JsonValueKind.Null, down.GetProperty("fetchedAt").ValueKind);
         Assert.Equal(0, down.GetProperty("tools").GetArrayLength());
         Assert.Equal(1, servers[2].GetProperty("tools").GetArrayLength());
     }
@@ -131,6 +132,20 @@ public class McpToolsEndpointTests : IDisposable
         var t1 = f.Time.GetUtcNow();
         Assert.Equal(t1, refreshed[0].GetProperty("fetchedAt").GetDateTimeOffset());
         Assert.Equal(t1, refreshed[2].GetProperty("fetchedAt").GetDateTimeOffset());
-        Assert.False(string.IsNullOrWhiteSpace(refreshed[1].GetProperty("error").GetString()));
+        Assert.Equal("無法連線", refreshed[1].GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Timed_out_server_shows_generic_timeout_error()
+    {
+        File.WriteAllText(path, Config);
+        using var f = new Factory(path);
+        f.Services.GetRequiredService<McpToolCatalog>().ServerTimeout = TimeSpan.FromMilliseconds(300);
+        f.Servers.Hang.Add("a");
+        var c = f.CreateClient();
+        c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token());
+        var a = (await Get(c, "/api/mcp-tools"))[2];
+        Assert.Equal("連線逾時", a.GetProperty("error").GetString());
+        Assert.Equal(JsonValueKind.Null, a.GetProperty("fetchedAt").ValueKind);
     }
 }

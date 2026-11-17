@@ -15,7 +15,8 @@ function flatten(schema: Schema, prefix: string, rows: Row[]): boolean {
   for (const [key, raw] of Object.entries(props ?? {})) {
     if (!isObj(raw) || UNSUPPORTED.some((k) => k in raw)) return false;
     const name = prefix + key;
-    const t = raw['type'];
+    // 缺 type（只有 enum／description）仍列出一列，型別顯示「—」
+    const t = raw['type'] ?? '—';
     if (typeof t !== 'string') return false;
     const items = raw['items'];
     if (t === 'array' && !(isObj(items) && typeof items['type'] === 'string')) return false;
@@ -23,8 +24,8 @@ function flatten(schema: Schema, prefix: string, rows: Row[]): boolean {
     let type = t === 'array' ? `array<${inner!['type']}>` : t;
     if (typeof raw['format'] === 'string') type += ` (${raw['format']})`;
     const desc = typeof raw['description'] === 'string' ? raw['description'] : '';
-    const en = Array.isArray(raw['enum']) ? `enum: ${raw['enum'].join(', ')}` : '';
-    rows.push({ name, type, required: required.includes(key), note: [desc, en].filter(Boolean).join(' ') });
+    const enumNote = Array.isArray(raw['enum']) ? `enum: ${raw['enum'].join(', ')}` : '';
+    rows.push({ name, type, required: required.includes(key), note: [desc, enumNote].filter(Boolean).join(' ') });
     if (t === 'object' && !flatten(raw, name + '.', rows)) return false;
     if (inner && inner['type'] === 'object' && !flatten(inner, name + '[].', rows)) return false;
   }

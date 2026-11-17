@@ -17,8 +17,8 @@ export interface McpTool {
 export interface McpServer {
   id: string;
   type: string;
-  /** 該筆列舉時間（ISO）；快取命中時是原本的時間 */
-  fetchedAt: string;
+  /** 該筆列舉時間（ISO）；快取命中時是原本的時間；連不上時為 null */
+  fetchedAt: string | null;
   /** 連不上時有值 */
   error: string | null;
   tools: McpTool[];

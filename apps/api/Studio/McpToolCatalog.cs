@@ -16,7 +16,7 @@ public sealed record McpToolInfo(
     JsonElement InputSchema, JsonElement? OutputSchema, ToolAnnotations? Annotations);
 
 /// <summary>一個 server 的列舉結果；連不上時 Error 有值、Tools 為空，不影響其他 server。</summary>
-public sealed record McpServerTools(string Server, IReadOnlyList<McpToolInfo> Tools, string? Error, DateTimeOffset FetchedAt);
+public sealed record McpServerTools(string Server, string Type, IReadOnlyList<McpToolInfo> Tools, string? Error, DateTimeOffset? FetchedAt, bool TimedOut = false);
 
 /// <summary>依設定建立 SDK 的 transport；獨立出來讓測試換成記憶體內的假 server。</summary>
 public interface IMcpTransportFactory
@@ -77,16 +77,17 @@ public sealed class McpToolCatalog(StudioConfigProvider config, IMcpTransportFac
         {
             await using var client = await McpClient.CreateAsync(transports.Create(id, cfg), cancellationToken: timeout.Token);
             var tools = await client.ListToolsAsync(cancellationToken: timeout.Token);
-            r = new McpServerTools(id, [.. tools.Select(t => new McpToolInfo(
+            r = new McpServerTools(id, cfg.Type, [.. tools.Select(t => new McpToolInfo(
                 id, t.Name, $"{id}__{t.Name}", t.Description, t.ProtocolTool.InputSchema,
                 t.ProtocolTool.OutputSchema, t.ProtocolTool.Annotations))], null, time.GetUtcNow());
         }
         catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            if (e is OperationCanceledException) e = new TimeoutException($"列舉逾時（{ServerTimeout.TotalSeconds:0.#} 秒）");
-            return new McpServerTools(id, [], e.Message, time.GetUtcNow()); // 失敗不進快取，下次再試
+            var timedOut = e is OperationCanceledException;
+            if (timedOut) e = new TimeoutException($"列舉逾時（{ServerTimeout.TotalSeconds:0.#} 秒）");
+            return new McpServerTools(id, cfg.Type, [], e.Message, null, timedOut); // 失敗不進快取，下次再試
         }
-        cache[key] = (r.FetchedAt, r);
+        cache[key] = (r.FetchedAt!.Value, r);
         return r;
     }
 }

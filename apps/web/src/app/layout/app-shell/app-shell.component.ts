@@ -24,7 +24,7 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
     icon: 'tickets',
   },
   {
-    label: 'MCP 工具 / Tool Catalog',
+    label: 'MCP Tool Catalog',
     route: '/mcp-tools',
     icon: 'tickets',
   },

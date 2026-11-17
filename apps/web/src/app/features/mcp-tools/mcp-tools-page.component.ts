@@ -1,6 +1,7 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
+import { DatePipe } from '@angular/common';
 import { map } from 'rxjs';
 import { McpServer, McpTool, McpToolsService } from '../../core/mcp-tools/mcp-tools.service';
 import { McpToolDetailComponent } from './mcp-tool-detail.component';
@@ -21,7 +22,7 @@ const byName = (a: McpTool, b: McpTool) =>
 @Component({
   selector: 'app-mcp-tools-page',
   standalone: true,
-  imports: [McpToolDetailComponent],
+  imports: [McpToolDetailComponent, DatePipe],
   template: `
     <div class="p-4">
       <div class="flex items-center gap-2 mb-4">
@@ -37,7 +38,7 @@ const byName = (a: McpTool, b: McpTool) =>
           <p class="empty text-sm text-slate-500">目前沒有任何 MCP server。</p>
         } @else {
           <div class="flex gap-4">
-            <!-- 左側清單（#43 搜尋框加在這個區塊頂端） -->
+            <!-- 左側清單 -->
             <nav class="list w-80 shrink-0 space-y-4">
               <input type="search" class="search w-full border rounded px-2 py-1" placeholder="搜尋工具、欄位…"
                 [value]="query()" (input)="query.set($any($event.target).value)" />
@@ -48,7 +49,9 @@ const byName = (a: McpTool, b: McpTool) =>
                 <section class="server">
                   <div class="flex items-baseline gap-2">
                     <h2 class="server-title font-semibold">{{ s.id }}</h2>
-                    <span class="fetched-at text-xs text-slate-500">更新於 {{ time(s.fetchedAt) }}</span>
+                    @if (s.fetchedAt) {
+                      <span class="fetched-at text-xs text-slate-500">更新於 {{ s.fetchedAt | date: 'HH:mm' }}</span>
+                    }
                   </div>
                   @if (s.error) {
                     <p class="server-error text-sm text-red-600">
@@ -136,16 +139,11 @@ export class McpToolsPageComponent {
     });
     this.svc.list().subscribe({
       next: (r) => this.servers.set(this.sorted(r.servers)),
-      error: () => this.error.set('無法載入 MCP 工具清單，請稍後再試。'),
+      error: () => this.error.set('無法載入 MCP Tool Catalog，請稍後再試。'),
     });
   }
 
   private sorted = (l: McpServer[]) => l.map((s) => ({ ...s, tools: [...s.tools].sort(byName) }));
-
-  time(iso: string) {
-    const d = new Date(iso);
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  }
 
   refresh() {
     this.refreshing.set(true);

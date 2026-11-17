@@ -44,6 +44,12 @@ describe('McpToolDetailComponent schema', () => {
     ]);
   });
 
+  it('renders a property without type as a row with type —', () => {
+    const { root } = render(mk({ inputSchema: { type: 'object', properties: { mode: { enum: ['A', 'B'], description: '模式' } } } }));
+    expect([...root.querySelectorAll('.input-schema tbody tr')].map(cells)).toEqual([['mode', '—', '', '模式 enum: A, B']]);
+    expect(root.querySelector('.input-schema pre')).toBeNull();
+  });
+
   it('falls back to raw JSON for oneOf / $ref without throwing', () => {
     const s = { type: 'object', properties: { a: { oneOf: [{ type: 'string' }, { type: 'number' }] } } };
     const { root } = render(mk({ inputSchema: s, outputSchema: { $ref: '#/defs/x' } }));
@@ -70,9 +76,9 @@ describe('McpToolDetailComponent schema', () => {
   });
 
   it('shows annotation badges only when present', () => {
-    const a = render(mk({ annotations: { readOnlyHint: true, destructiveHint: false } }));
+    const a = render(mk({ annotations: { readOnlyHint: true, destructiveHint: false, title: null } }));
     expect([...a.root.querySelectorAll('.annotation')].map((e) => e.textContent?.trim()))
-      .toEqual(['readOnlyHint: true', 'destructiveHint: false']);
+      .toEqual(['readOnlyHint: true']); // false／null 的提示不顯示
     const b = render(mk());
     expect(b.root.querySelector('.annotation')).toBeNull();
   });

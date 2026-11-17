@@ -27,7 +27,7 @@ public class McpToolCatalogTests : IDisposable
         public IClientTransport Create(string serverId, McpServerConfig cfg)
         {
             Connections.Add((serverId, cfg));
-            if (!tools.TryGetValue(serverId, out var t)) throw new InvalidOperationException("連線失敗");
+            if (!tools.TryGetValue(serverId, out var t)) throw new InvalidOperationException($"連線失敗 {cfg.Url} {cfg.Command} {string.Join(' ', cfg.Args)}");
             Pipe c2s = new(), s2c = new();
             var server = McpServer.Create(new StreamServerTransport(c2s.Reader.AsStream(), s2c.Writer.AsStream()),
                 new McpServerOptions { Handlers = new() { ListToolsHandler = async (_, ct) =>
