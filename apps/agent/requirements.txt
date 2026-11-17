@@ -1,4 +1,4 @@
-pydantic-ai-slim
+pydantic-ai-slim[openai]
 fastapi
 uvicorn
 httpx
