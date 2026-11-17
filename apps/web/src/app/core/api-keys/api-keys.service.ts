@@ -29,4 +29,8 @@ export class ApiKeysService {
   list(): Observable<ApiKey[]> {
     return this.http.get<ApiKey[]>(this.base);
   }
+
+  revoke(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${encodeURIComponent(id)}`);
+  }
 }

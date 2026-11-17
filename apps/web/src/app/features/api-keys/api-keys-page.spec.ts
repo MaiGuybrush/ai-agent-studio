@@ -58,4 +58,55 @@ describe('ApiKeysPageComponent', () => {
     fixture.detectChanges();
     expect(root().querySelector('.error')?.textContent).toContain('無法載入');
   });
+
+  describe('revoke', () => {
+    function withKeys() {
+      const s = setup();
+      s.req.flush([key({ id: 'a', label: 'alpha', scopes: ['mes', 'erp'] }), key({ id: 'b', label: 'beta' })]);
+      s.fixture.detectChanges();
+      const open = () => {
+        (s.root().querySelector('tbody tr button.revoke') as HTMLButtonElement).click();
+        s.fixture.detectChanges();
+      };
+      return { ...s, open, http: TestBed.inject(HttpTestingController) };
+    }
+
+    it('confirm dialog shows label and scopes; cancel sends nothing', () => {
+      const { fixture, root, open, http } = withKeys();
+      open();
+      const dlg = root().querySelector('.revoke-dialog')!;
+      expect(dlg.textContent).toContain('alpha');
+      expect(dlg.textContent).toContain('mes');
+      expect(dlg.textContent).toContain('erp');
+      (dlg.querySelector('button.cancel') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(root().querySelector('.revoke-dialog')).toBeNull();
+      expect(root().querySelectorAll('tbody tr').length).toBe(2);
+      http.verify();
+    });
+
+    it('confirm sends DELETE and removes the row', () => {
+      const { fixture, root, open, http } = withKeys();
+      open();
+      (root().querySelector('.revoke-dialog button.confirm') as HTMLButtonElement).click();
+      const del = http.expectOne('http://uac/auth/api-keys/a');
+      expect(del.request.method).toBe('DELETE');
+      del.flush(null, { status: 204, statusText: 'No Content' });
+      fixture.detectChanges();
+      const rows = root().querySelectorAll('tbody tr');
+      expect(rows.length).toBe(1);
+      expect(rows[0].textContent).toContain('beta');
+      expect(root().querySelector('.revoke-dialog')).toBeNull();
+    });
+
+    it('failure shows an error and keeps the list', () => {
+      const { fixture, root, open, http } = withKeys();
+      open();
+      (root().querySelector('.revoke-dialog button.confirm') as HTMLButtonElement).click();
+      http.expectOne('http://uac/auth/api-keys/a').flush('x', { status: 500, statusText: 'err' });
+      fixture.detectChanges();
+      expect(root().querySelector('.revoke-error')?.textContent).toContain('撤銷失敗');
+      expect(root().querySelectorAll('tbody tr').length).toBe(2);
+    });
+  });
 });

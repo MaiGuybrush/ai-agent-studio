@@ -23,7 +23,7 @@ import { ApiKey, ApiKeysService } from '../../core/api-keys/api-keys.service';
             <thead>
               <tr class="text-left text-slate-500">
                 <th class="p-2">Label</th><th class="p-2">Key 前綴</th><th class="p-2">Scopes</th>
-                <th class="p-2">建立時間</th><th class="p-2">最後使用</th><th class="p-2">到期日</th>
+                <th class="p-2">建立時間</th><th class="p-2">最後使用</th><th class="p-2">到期日</th><th class="p-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -48,6 +48,9 @@ import { ApiKey, ApiKeysService } from '../../core/api-keys/api-keys.service';
                       @if (isExpired(k)) { <span class="expired text-red-600">已過期</span> }
                     } @else { 不過期 }
                   </td>
+                  <td class="p-2">
+                    <button class="revoke text-red-600" type="button" (click)="confirming.set(k)">撤銷</button>
+                  </td>
                 </tr>
               }
             </tbody>
@@ -56,6 +59,19 @@ import { ApiKey, ApiKeysService } from '../../core/api-keys/api-keys.service';
       } @else {
         <p class="text-sm text-slate-500">載入中…</p>
       }
+      @if (confirming(); as c) {
+        <div class="revoke-dialog fixed inset-0 flex items-center justify-center bg-black/40" role="dialog">
+          <div class="bg-white rounded p-4 space-y-3 max-w-md">
+            <p>確定要撤銷「{{ c.label }}」嗎？</p>
+            <p class="text-sm">Scopes：{{ c.scopes.join('、') }}</p>
+            @if (revokeError()) { <p class="revoke-error text-sm text-red-600">{{ revokeError() }}</p> }
+            <div class="flex gap-2 justify-end">
+              <button class="cancel px-3 py-1" type="button" (click)="confirming.set(null); revokeError.set(null)">取消</button>
+              <button class="confirm px-3 py-1 rounded bg-red-600 text-white" type="button" (click)="revoke(c)">撤銷</button>
+            </div>
+          </div>
+        </div>
+      }
     </div>
   `,
 })
@@ -63,6 +79,20 @@ export class ApiKeysPageComponent {
   private readonly api = inject(ApiKeysService);
   readonly keys = signal<ApiKey[] | null>(null);
   readonly error = signal<string | null>(null);
+
+  readonly confirming = signal<ApiKey | null>(null);
+  readonly revokeError = signal<string | null>(null);
+
+  revoke(k: ApiKey): void {
+    this.api.revoke(k.id).subscribe({
+      next: () => {
+        this.keys.update((l) => l?.filter((x) => x.id !== k.id) ?? l);
+        this.confirming.set(null);
+        this.revokeError.set(null);
+      },
+      error: () => this.revokeError.set('撤銷失敗，請稍後再試。'),
+    });
+  }
 
   constructor() {
     this.api.list().subscribe({
