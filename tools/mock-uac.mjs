@@ -64,7 +64,7 @@ createServer(async (req, res) => {
     });
     return res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(`<meta charset="utf-8"><h3>Mock UAC：選擇登入身分</h3><ul>${rows.join('')}</ul>`);
   }
-  const ak = url.pathname.match(/^\/api-keys(?:\/([^/]+))?\/?$/);
+  const ak = url.pathname.match(/^(?:\/auth)?\/api-keys(?:\/([^/]+))?\/?$/);
   if (ak) {
     const caller = verify(req.headers.authorization);
     if (!caller) return json(res, 401, { error: 'invalid token' });
