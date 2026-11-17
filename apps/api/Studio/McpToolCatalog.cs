@@ -16,7 +16,7 @@ public sealed record McpToolInfo(
     JsonElement InputSchema, JsonElement? OutputSchema, ToolAnnotations? Annotations);
 
 /// <summary>一個 server 的列舉結果；連不上時 Error 有值、Tools 為空，不影響其他 server。</summary>
-public sealed record McpServerTools(string Server, IReadOnlyList<McpToolInfo> Tools, string? Error);
+public sealed record McpServerTools(string Server, IReadOnlyList<McpToolInfo> Tools, string? Error, DateTimeOffset FetchedAt);
 
 /// <summary>依設定建立 SDK 的 transport；獨立出來讓測試換成記憶體內的假 server。</summary>
 public interface IMcpTransportFactory
@@ -53,10 +53,10 @@ public sealed class McpToolCatalog(StudioConfigProvider config, IMcpTransportFac
     public TimeSpan ServerTimeout { get; set; } = TimeSpan.FromSeconds(10);
     readonly ConcurrentDictionary<string, (DateTimeOffset At, McpServerTools Result)> cache = new();
 
-    public async Task<IReadOnlyList<McpServerTools>> ListAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<McpServerTools>> ListAsync(CancellationToken ct = default, bool refresh = false)
     {
         // 平行列舉；Task.WhenAll 依輸入順序回傳，維持設定檔順序
-        return await Task.WhenAll(config.Current.McpServers.Select(s => ListServerAsync(s.Key, s.Value, ct)));
+        return await Task.WhenAll(config.Current.McpServers.Select(s => ListServerAsync(s.Key, s.Value, ct, refresh)));
     }
 
     /// <summary>單一 server 的最新工具清單：略過快取直接重新列舉（結果會更新快取）。找不到該 server 設定回 null。供實作檢查用（spec 6.4）。</summary>
@@ -79,14 +79,14 @@ public sealed class McpToolCatalog(StudioConfigProvider config, IMcpTransportFac
             var tools = await client.ListToolsAsync(cancellationToken: timeout.Token);
             r = new McpServerTools(id, [.. tools.Select(t => new McpToolInfo(
                 id, t.Name, $"{id}__{t.Name}", t.Description, t.ProtocolTool.InputSchema,
-                t.ProtocolTool.OutputSchema, t.ProtocolTool.Annotations))], null);
+                t.ProtocolTool.OutputSchema, t.ProtocolTool.Annotations))], null, time.GetUtcNow());
         }
         catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             if (e is OperationCanceledException) e = new TimeoutException($"列舉逾時（{ServerTimeout.TotalSeconds:0.#} 秒）");
-            return new McpServerTools(id, [], e.Message); // 失敗不進快取，下次再試
+            return new McpServerTools(id, [], e.Message, time.GetUtcNow()); // 失敗不進快取，下次再試
         }
-        cache[key] = (time.GetUtcNow(), r);
+        cache[key] = (r.FetchedAt, r);
         return r;
     }
 }

@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ConfigService } from '../config/config.service';
 
-/** GET /api/mcp-tools 的工具項目。後續欄位（例如 #44 的 fetchedAt 在 server 層）加在這裡即可。 */
+/** GET /api/mcp-tools 的工具項目。 */
 export interface McpTool {
   name: string;
   /** `server__tool` */
@@ -17,6 +17,8 @@ export interface McpTool {
 export interface McpServer {
   id: string;
   type: string;
+  /** 該筆列舉時間（ISO）；快取命中時是原本的時間 */
+  fetchedAt: string;
   /** 連不上時有值 */
   error: string | null;
   tools: McpTool[];
@@ -31,8 +33,8 @@ export class McpToolsService {
   private readonly http = inject(HttpClient);
   private readonly config = inject(ConfigService);
 
-  list(): Observable<McpToolsResponse> {
+  list(refresh = false): Observable<McpToolsResponse> {
     const base = this.config.normalizeUrl(String(this.config.config()['apiBaseUrl'] ?? ''));
-    return this.http.get<McpToolsResponse>(`${base}/api/mcp-tools`);
+    return this.http.get<McpToolsResponse>(`${base}/api/mcp-tools`, refresh ? { params: { refresh: true } } : {});
   }
 }

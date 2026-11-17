@@ -8,7 +8,7 @@ import { McpServer, McpTool } from '../../core/mcp-tools/mcp-tools.service';
 const tool = (server: string, name: string, o: Partial<McpTool> = {}): McpTool => ({
   name, qualifiedName: `${server}__${name}`, description: null, inputSchema: {}, outputSchema: null, annotations: null, ...o,
 });
-const server = (id: string, tools: McpTool[] = [], error: string | null = null): McpServer => ({ id, type: 'http', error, tools });
+const server = (id: string, tools: McpTool[] = [], error: string | null = null, fetchedAt = '2026-01-01T03:07:00Z'): McpServer => ({ id, type: 'http', fetchedAt, error, tools });
 
 describe('McpToolsPageComponent', () => {
   function setup() {
@@ -77,5 +77,53 @@ describe('McpToolsPageComponent', () => {
     req.flush('x', { status: 500, statusText: 'err' });
     fixture.detectChanges();
     expect(root().querySelector('.error')?.textContent).toContain('無法載入');
+  });
+
+  describe('freshness', () => {
+    const hhmm = (iso: string) => {
+      const d = new Date(iso);
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    };
+
+    it('shows 更新於 HH:mm beside each server title', () => {
+      const { fixture, req, root } = setup();
+      req.flush({ servers: [server('a', [], null, '2026-01-01T03:07:00Z'), server('b', [], null, '2026-01-01T09:45:00Z')] });
+      fixture.detectChanges();
+      const times = [...root().querySelectorAll('.server .fetched-at')].map((e) => e.textContent?.trim());
+      expect(times).toEqual([`更新於 ${hhmm('2026-01-01T03:07:00Z')}`, `更新於 ${hhmm('2026-01-01T09:45:00Z')}`]);
+    });
+
+    it('refresh button refetches with refresh=true, shows busy state, then updates the view and time', () => {
+      const { fixture, req, root } = setup();
+      const http = TestBed.inject(HttpTestingController);
+      req.flush({ servers: [server('a', [tool('a', 'old')], null, '2026-01-01T03:07:00Z')] });
+      fixture.detectChanges();
+      const btn = root().querySelector('.refresh') as HTMLButtonElement;
+      expect(btn.disabled).toBe(false);
+      btn.click();
+      fixture.detectChanges();
+      expect(btn.disabled).toBe(true);
+      expect(root().querySelector('.refreshing')).toBeTruthy();
+      http.expectOne('http://api/api/mcp-tools?refresh=true')
+        .flush({ servers: [server('a', [tool('a', 'new')], null, '2026-01-01T09:45:00Z')] });
+      fixture.detectChanges();
+      expect(btn.disabled).toBe(false);
+      expect(root().querySelector('.refreshing')).toBeNull();
+      expect(root().querySelector('.tool')?.textContent?.trim()).toBe('new');
+      expect(root().querySelector('.fetched-at')?.textContent).toContain(hhmm('2026-01-01T09:45:00Z'));
+    });
+
+    it('keeps the old view when refresh fails', () => {
+      const { fixture, req, root } = setup();
+      const http = TestBed.inject(HttpTestingController);
+      req.flush({ servers: [server('a', [tool('a', 'old')])] });
+      fixture.detectChanges();
+      (root().querySelector('.refresh') as HTMLButtonElement).click();
+      http.expectOne('http://api/api/mcp-tools?refresh=true').flush('x', { status: 500, statusText: 'err' });
+      fixture.detectChanges();
+      expect(root().querySelector('.tool')?.textContent?.trim()).toBe('old');
+      expect(root().querySelector('.refresh-error')).toBeTruthy();
+      expect((root().querySelector('.refresh') as HTMLButtonElement).disabled).toBe(false);
+    });
   });
 });

@@ -30,6 +30,8 @@ public class McpToolsEndpointTests : IDisposable
 
     class Factory(string path) : WebApplicationFactory<Program>
     {
+        public readonly Microsoft.Extensions.Time.Testing.FakeTimeProvider Time = new();
+        public McpToolCatalogTests.FakeServers Servers = null!;
         protected override void ConfigureWebHost(IWebHostBuilder b)
         {
             b.UseEnvironment("Testing");
@@ -38,7 +40,8 @@ public class McpToolsEndpointTests : IDisposable
                 s.RemoveAll<IJwksProvider>(); s.AddSingleton<IJwksProvider, FakeJwks>();
                 s.RemoveAll<StudioConfigProvider>(); s.AddSingleton(new StudioConfigProvider(path, _ => "k"));
                 s.RemoveAll<IMcpTransportFactory>();
-                s.AddSingleton<IMcpTransportFactory>(new McpToolCatalogTests.FakeServers(new()
+                s.RemoveAll<TimeProvider>(); s.AddSingleton<TimeProvider>(Time);
+                s.AddSingleton<IMcpTransportFactory>(Servers = new McpToolCatalogTests.FakeServers(new()
                 {
                     ["b"] = [new Tool { Name = "Zeta", Description = "第一行\n第二行", InputSchema = McpToolCatalogTests.Obj("{\"id\":{\"type\":\"string\"}}"),
                         OutputSchema = McpToolCatalogTests.Obj("{}"), Annotations = new ToolAnnotations { ReadOnlyHint = true } }],
@@ -99,5 +102,35 @@ public class McpToolsEndpointTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(down.GetProperty("error").GetString()));
         Assert.Equal(0, down.GetProperty("tools").GetArrayLength());
         Assert.Equal(1, servers[2].GetProperty("tools").GetArrayLength());
+    }
+
+    static async Task<JsonElement> Get(HttpClient c, string url) =>
+        JsonDocument.Parse(await c.GetStringAsync(url)).RootElement.GetProperty("servers").Clone();
+
+    [Fact]
+    public async Task FetchedAt_is_kept_on_cache_hit_and_renewed_by_refresh_and_failed_server_is_not_cached()
+    {
+        File.WriteAllText(path, Config);
+        using var f = new Factory(path);
+        var c = f.CreateClient();
+        c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token());
+        var t0 = f.Time.GetUtcNow();
+
+        var first = await Get(c, "/api/mcp-tools");
+        Assert.Equal(t0, first[0].GetProperty("fetchedAt").GetDateTimeOffset());
+        var connections = f.Servers.Connections.Count;
+
+        f.Time.Advance(TimeSpan.FromMinutes(1));
+        var cached = await Get(c, "/api/mcp-tools");
+        Assert.Equal(t0, cached[0].GetProperty("fetchedAt").GetDateTimeOffset());
+        Assert.Equal(t0, cached[2].GetProperty("fetchedAt").GetDateTimeOffset());
+        // 命中快取的 server 不重連；失敗的 "down" 不進快取，所以只多一次連線
+        Assert.Equal(connections + 1, f.Servers.Connections.Count);
+
+        var refreshed = await Get(c, "/api/mcp-tools?refresh=true");
+        var t1 = f.Time.GetUtcNow();
+        Assert.Equal(t1, refreshed[0].GetProperty("fetchedAt").GetDateTimeOffset());
+        Assert.Equal(t1, refreshed[2].GetProperty("fetchedAt").GetDateTimeOffset());
+        Assert.False(string.IsNullOrWhiteSpace(refreshed[1].GetProperty("error").GetString()));
     }
 }
