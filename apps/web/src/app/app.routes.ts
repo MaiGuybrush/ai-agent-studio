@@ -7,6 +7,7 @@ import { TicketDetailComponent } from './features/tickets/ticket-detail.componen
 import { InterviewPageComponent } from './features/interview/interview-page.component';
 import { ReviewPendingComponent } from './features/reviews/review-pending.component';
 import { ReviewPageComponent } from './features/reviews/review-page.component';
+import { ApiKeysPageComponent } from './features/api-keys/api-keys-page.component';
 
 export const routes: Routes = [
   {
@@ -25,6 +26,7 @@ export const routes: Routes = [
   { path: 'tickets/:id/interview', component: InterviewPageComponent, canActivate: [authGuard] },
   { path: 'reviews', component: ReviewPendingComponent, canActivate: [authGuard] },
   { path: 'reviews/:ticketId/:specId', component: ReviewPageComponent, canActivate: [authGuard] },
+  { path: 'settings/api-keys', component: ApiKeysPageComponent, canActivate: [authGuard] },
   {
     path: '**',
     redirectTo: 'dashboard'

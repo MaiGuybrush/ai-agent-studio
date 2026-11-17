@@ -47,6 +47,9 @@
 
         @if (isUserMenuOpen()) {
           <div class="dropdown-menu">
+            <a class="dropdown-action api-keys-link" routerLink="/settings/api-keys" (click)="closeUserMenu()">
+              <span>Personal API Key</span>
+            </a>
             <button class="dropdown-action" (click)="openVersionInfo()">
               <svg
                 width="16"

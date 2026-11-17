@@ -42,3 +42,49 @@ test('basic-info needs no auth and returns adId', async () => {
   assert.equal((await r.json()).adId, 'biz.lin');
 });
 test('basic-info unknown empNo -> 404', async () => assert.equal((await fetch(`${base}/HrEmployee/99999999/basic-info`)).status, 404));
+
+// --- Personal API Key（spec §12.1）---
+const keys = (method, token, path = '', payload) => fetch(`${base}/api-keys${path}`, {
+  method, headers: token ? { authorization: `Bearer ${token}` } : {}, body: payload ? JSON.stringify(payload) : undefined,
+});
+const create = (token, payload = { label: 'k', scopes: ['*'], expiresAt: null }) => keys('POST', token, '', payload);
+
+test('api-keys: no token -> 401 on all endpoints', async () => {
+  for (const [m, p] of [['GET', ''], ['POST', ''], ['DELETE', '/x'], ['GET', '/systems']]) assert.equal((await keys(m, null, p)).status, 401);
+});
+test('api-keys/systems returns fixed list including *', async () => {
+  const r = await keys('GET', await tokenOf('10000001'), '/systems');
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.ok(Array.isArray(j) && j.includes('*') && j.length > 1);
+});
+test('POST returns fullKey once; GET lists without it', async () => {
+  const t = await tokenOf('10000001');
+  const r = await create(t, { label: 'mine', scopes: ['*'], expiresAt: '2030-01-01T00:00:00Z' });
+  assert.equal(r.status, 201);
+  const k = await r.json();
+  assert.ok(k.fullKey.startsWith(k.keyPrefix));
+  assert.deepEqual([k.empId, k.label, k.scopes, k.expiresAt, k.lastUsedAt], ['10000001', 'mine', ['*'], '2030-01-01T00:00:00Z', null]);
+  assert.ok(k.id && k.createdAt);
+  const got = (await (await keys('GET', t)).json()).find(x => x.id === k.id);
+  assert.ok(got && !('fullKey' in got));
+});
+test('POST rejects * mixed with other scopes, unknown scope, empty scopes', async () => {
+  const t = await tokenOf('10000001');
+  const [sys] = (await (await keys('GET', t, '/systems')).json()).filter(s => s !== '*');
+  for (const scopes of [['*', sys], ['no-such-system'], []]) assert.equal((await create(t, { label: 'x', scopes, expiresAt: null })).status, 400);
+  assert.equal((await create(t, { label: 'x', scopes: [sys], expiresAt: null })).status, 201);
+});
+test('POST rejects label longer than 50 chars', async () => {
+  const t = await tokenOf('10000001');
+  assert.equal((await create(t, { label: 'x'.repeat(51), scopes: ['*'], expiresAt: null })).status, 400);
+  assert.equal((await create(t, { label: 'x'.repeat(50), scopes: ['*'], expiresAt: null })).status, 201);
+});
+test("GET and DELETE only touch the caller's own keys", async () => {
+  const a = await tokenOf('10000001'), b = await tokenOf('10000002');
+  const k = await (await create(a)).json();
+  assert.equal((await (await keys('GET', b)).json()).some(x => x.id === k.id), false);
+  assert.equal((await keys('DELETE', b, `/${k.id}`)).status, 404);
+  assert.equal((await keys('DELETE', a, `/${k.id}`)).status, 204);
+  assert.equal((await (await keys('GET', a)).json()).some(x => x.id === k.id), false);
+});
