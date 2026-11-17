@@ -46,7 +46,8 @@ const body = req => new Promise(r => { let s = ''; req.on('data', c => s += c).o
 
 createServer(async (req, res) => {
   res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-headers', '*');
+  res.setHeader('access-control-allow-headers', '*, authorization');
+  res.setHeader('access-control-allow-methods', 'GET, POST, PUT, DELETE, OPTIONS');
   const url = new URL(req.url, origin);
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
   if (url.pathname === '/.well-known/jwks.json') return json(res, 200, { keys: [{ ...publicKey.export({ format: 'jwk' }), alg: 'RS256' }] });
