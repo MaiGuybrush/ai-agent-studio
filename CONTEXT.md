@@ -64,6 +64,10 @@ _Avoid_: prompt、腳本
 公司的雲端 agent 平台；Skill 在此撰寫，Skill 與 MCP 工具在此手動註冊才能使用，不在 Studio 範圍內。
 _Avoid_: 正式環境
 
+**Personal API Key**:
+UAC 發給使用者本人、用來呼叫特定系統 MCP 工具的金鑰，以 scope 限定可用系統（`*` 表示全部系統）；使用者在 Studio 自行建立與撤銷，完整金鑰只在建立當下顯示一次。
+_Avoid_: 單獨使用「API key」（易與 C# 到 Python 的服務金鑰、MCP Server List 的 `X-Api-Key` 混淆）、token
+
 **Requirement Ticket Status**:
 Requirement Ticket 的進度；除「訪談中」「已取消」由人觸發外，其餘由所屬 Tool Spec 的狀態推導——全部 Tool Spec 已實作即為「已完成」。
 _Avoid_: 工單狀態
