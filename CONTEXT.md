@@ -44,6 +44,10 @@ _Avoid_: 工具類型
 Studio 後端設定的 MCP server 清單；agent 由此列舉現有工具，判斷可直接套用、需擴增或需新增。
 _Avoid_: 工具清單、Registry
 
+**MCP Tool Catalog**:
+由 MCP Server List 列舉出的各 server 工具及其介面（說明、輸入輸出欄位、提示），在 Studio 內唯讀瀏覽與搜尋；不呼叫任何工具。
+_Avoid_: 工具清單、Registry
+
 **Naming Check**:
 以 `Tier1Vocabulary` 檢查 Tool Spec 欄位名稱：與標準名稱完全一致才通過；僅大小寫不同或命中別名則提醒改為標準名稱；查無則視為新名詞交由使用者確認。
 _Avoid_: lint、驗證
