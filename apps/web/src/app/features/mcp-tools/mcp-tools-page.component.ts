@@ -48,7 +48,7 @@ const byName = (a: McpTool, b: McpTool) =>
             <nav class="list w-80 shrink-0 space-y-4">
               <input type="search" class="search w-full border rounded px-2 py-1" placeholder="搜尋工具、欄位…"
                 [value]="query()" (input)="query.set($any($event.target).value)" />
-              @if (query().trim() && visible().length === 0) {
+              @if (query().trim() && visible().length === 0 && !anyLoading()) {
                 <p class="no-results text-sm text-slate-500">找不到符合「{{ query().trim() }}」的工具。</p>
               }
               @for (s of visible(); track s.id) {
@@ -114,8 +114,9 @@ export class McpToolsPageComponent {
           : s.tools.filter((t) =>
               [t.name, t.description ?? '', ...fieldNames(t.inputSchema), ...fieldNames(t.outputSchema)].some(has)),
       }))
-      .filter((s) => s.tools.length > 0);
+      .filter((s) => s.loading || s.tools.length > 0); // 載入中的區塊保留，載入完才依結果收起
   });
+  readonly anyLoading = computed(() => (this.servers() ?? []).some((s) => s.loading));
   readonly selected = signal<McpTool | null>(null);
 
   readonly refreshing = signal(false);

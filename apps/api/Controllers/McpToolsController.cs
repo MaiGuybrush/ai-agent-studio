@@ -22,8 +22,6 @@ public sealed record McpServerIdDto(string Id, string Type);
 
 public sealed record McpServerListResponse(McpServerIdDto[] Servers);
 
-public sealed record McpToolsResponse(McpServerDto[] Servers);
-
 [ApiController]
 [Route("api/mcp-tools")]
 public class McpToolsController(McpToolCatalog catalog) : ControllerBase
@@ -31,10 +29,6 @@ public class McpToolsController(McpToolCatalog catalog) : ControllerBase
     static McpServerDto ToDto(McpServerTools s) => new(
         s.Server, s.Type, s.FetchedAt, s.Error is null ? null : s.TimedOut ? "連線逾時" : "無法連線",
         [.. s.Tools.Select(t => new McpToolDto(t.Name, t.QualifiedName, t.Description, t.InputSchema, t.OutputSchema, t.Annotations))]);
-
-    [HttpGet, Authorize]
-    public async Task<McpToolsResponse> Get(CancellationToken ct, [FromQuery] bool refresh = false) =>
-        new([.. (await catalog.ListAsync(ct, refresh)).Select(ToDto)]);
 
     [HttpGet("servers"), Authorize]
     public McpServerListResponse ListServers() => new([.. catalog.ListServerIds().Select(s => new McpServerIdDto(s.Id, s.Type))]);
