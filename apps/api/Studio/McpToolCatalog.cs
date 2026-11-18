@@ -59,6 +59,13 @@ public sealed class McpToolCatalog(StudioConfigProvider config, IMcpTransportFac
         return await Task.WhenAll(config.Current.McpServers.Select(s => ListServerAsync(s.Key, s.Value, ct, refresh)));
     }
 
+    /// <summary>只回設定中的 server id 與 type，不連線。</summary>
+    public IReadOnlyList<(string Id, string Type)> ListServerIds() => [.. config.Current.McpServers.Select(s => (s.Key, s.Value.Type))];
+
+    /// <summary>單一 server 的工具清單，走快取（refresh 略過）。找不到設定回 null。</summary>
+    public async Task<McpServerTools?> GetAsync(string id, CancellationToken ct = default, bool refresh = false) =>
+        config.Current.McpServers.TryGetValue(id, out var cfg) ? await ListServerAsync(id, cfg, ct, refresh) : null;
+
     /// <summary>單一 server 的最新工具清單：略過快取直接重新列舉（結果會更新快取）。找不到該 server 設定回 null。供實作檢查用（spec 6.4）。</summary>
     public async Task<McpServerTools?> ListFreshAsync(string id, CancellationToken ct = default) =>
         config.Current.McpServers.TryGetValue(id, out var cfg) ? await ListServerAsync(id, cfg, ct, fresh: true) : null;

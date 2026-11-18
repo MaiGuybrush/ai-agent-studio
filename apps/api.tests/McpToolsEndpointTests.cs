@@ -148,4 +148,69 @@ public class McpToolsEndpointTests : IDisposable
         Assert.Equal("連線逾時", a.GetProperty("error").GetString());
         Assert.Equal(JsonValueKind.Null, a.GetProperty("fetchedAt").ValueKind);
     }
+
+    HttpClient Authed(Factory f)
+    {
+        var c = f.CreateClient();
+        c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token());
+        return c;
+    }
+
+    [Fact]
+    public async Task Server_list_returns_only_id_and_type_without_connecting()
+    {
+        File.WriteAllText(path, Config);
+        using var f = new Factory(path);
+        var c = Authed(f);
+        var raw = await c.GetStringAsync("/api/mcp-tools/servers");
+        Assert.Empty(f.Servers.Connections);
+        foreach (var s in new[] { "TOPSECRET", "secret-host", "secret-cmd", "secret-arg", "\"headers\"", "\"env\"", "\"url\"", "\"command\"", "\"args\"" })
+            Assert.DoesNotContain(s, raw);
+        var servers = JsonDocument.Parse(raw).RootElement.GetProperty("servers");
+        Assert.Equal(["b", "down", "a"], servers.EnumerateArray().Select(s => s.GetProperty("id").GetString()));
+        Assert.Equal("stdio", servers[1].GetProperty("type").GetString());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await f.CreateClient().GetAsync("/api/mcp-tools/servers")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Single_server_returns_tools_or_error_and_unknown_id_is_404()
+    {
+        File.WriteAllText(path, Config);
+        using var f = new Factory(path);
+        var c = Authed(f);
+        var b = JsonDocument.Parse(await c.GetStringAsync("/api/mcp-tools/servers/b")).RootElement;
+        Assert.Equal("b", b.GetProperty("id").GetString());
+        Assert.Equal("b__Zeta", b.GetProperty("tools")[0].GetProperty("qualifiedName").GetString());
+        var down = JsonDocument.Parse(await c.GetStringAsync("/api/mcp-tools/servers/down")).RootElement;
+        Assert.Equal("無法連線", down.GetProperty("error").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync("/api/mcp-tools/servers/nope")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Single_server_hits_cache_and_refresh_bypasses_it()
+    {
+        File.WriteAllText(path, Config);
+        using var f = new Factory(path);
+        var c = Authed(f);
+        await c.GetStringAsync("/api/mcp-tools/servers/a");
+        var n = f.Servers.Connections.Count;
+        await c.GetStringAsync("/api/mcp-tools/servers/a");
+        Assert.Equal(n, f.Servers.Connections.Count);
+        await c.GetStringAsync("/api/mcp-tools/servers/a?refresh=true");
+        Assert.Equal(n + 1, f.Servers.Connections.Count);
+    }
+
+    [Fact]
+    public async Task Single_server_timeout_does_not_affect_others()
+    {
+        File.WriteAllText(path, Config);
+        using var f = new Factory(path);
+        f.Services.GetRequiredService<McpToolCatalog>().ServerTimeout = TimeSpan.FromMilliseconds(300);
+        f.Servers.Hang.Add("a");
+        var c = Authed(f);
+        var a = JsonDocument.Parse(await c.GetStringAsync("/api/mcp-tools/servers/a")).RootElement;
+        Assert.Equal("連線逾時", a.GetProperty("error").GetString());
+        var b = JsonDocument.Parse(await c.GetStringAsync("/api/mcp-tools/servers/b")).RootElement;
+        Assert.Equal(JsonValueKind.Null, b.GetProperty("error").ValueKind);
+    }
 }
