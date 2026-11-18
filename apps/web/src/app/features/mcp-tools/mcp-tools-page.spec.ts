@@ -23,14 +23,52 @@ describe('McpToolsPageComponent', () => {
     const fixture = TestBed.createComponent(McpToolsPageComponent);
     const http = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
-    const req = http.expectOne('http://api/api/mcp-tools');
+    const listReq = http.expectOne('http://api/api/mcp-tools/servers');
     const root = () => fixture.nativeElement as HTMLElement;
-    return { fixture, req, root };
+    /** 先回 server 清單，再讓每個 server 的請求各自回應（完整載入的捷徑）。 */
+    const req = {
+      flush: (body: any, opts?: { status: number; statusText: string }) => {
+        if (opts) return listReq.flush(body, opts);
+        const servers = (body as { servers: McpServer[] }).servers;
+        listReq.flush({ servers: servers.map(({ id, type }) => ({ id, type })) });
+        servers.forEach((s) => http.expectOne(`http://api/api/mcp-tools/servers/${s.id}`).flush(s));
+      },
+    };
+    return { fixture, req, root, listReq, http };
   }
 
   it('shows a loading indicator until the response arrives', () => {
     const { root } = setup();
     expect(root().querySelector('.loading')).toBeTruthy();
+  });
+
+  describe('progressive loading', () => {
+    it('renders all server blocks as loading right after the list arrives, in list order', () => {
+      const { fixture, listReq, root } = setup();
+      listReq.flush({ servers: [{ id: 'slow', type: 'http' }, { id: 'fast', type: 'http' }] });
+      fixture.detectChanges();
+      expect([...root().querySelectorAll('.server-title')].map((e) => e.textContent?.trim())).toEqual(['slow', 'fast']);
+      expect(root().querySelectorAll('.server .server-loading').length).toBe(2);
+      expect(root().querySelector('.loading')).toBeNull();
+    });
+
+    it('shows the fast server tools and detail while the slow one is still loading or failed', () => {
+      const { fixture, listReq, http, root } = setup();
+      listReq.flush({ servers: [{ id: 'slow', type: 'http' }, { id: 'fast', type: 'http' }, { id: 'dead', type: 'http' }] });
+      http.expectOne('http://api/api/mcp-tools/servers/fast').flush(server('fast', [tool('fast', 'go')]));
+      http.expectOne('http://api/api/mcp-tools/servers/dead').flush('x', { status: 500, statusText: 'err' });
+      fixture.detectChanges();
+      const secs = root().querySelectorAll('.server');
+      expect(secs[0].querySelector('.server-loading')?.textContent).toContain('載入中');
+      expect(secs[1].querySelectorAll('.tool').length).toBe(1);
+      expect(secs[2].querySelector('.badge-error')?.textContent).toContain('無法連線');
+      (secs[1].querySelector('.tool') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(root().querySelector('.qualified-name')?.textContent).toContain('fast__go');
+      http.expectOne('http://api/api/mcp-tools/servers/slow').flush(server('slow', [tool('slow', 'x')]));
+      fixture.detectChanges();
+      expect(root().querySelector('.server-loading')).toBeNull();
+    });
   });
 
   it('lists servers in given order and tools sorted case-insensitively', () => {
@@ -113,8 +151,8 @@ describe('McpToolsPageComponent', () => {
       fixture.detectChanges();
       expect(btn.disabled).toBe(true);
       expect(root().querySelector('.refreshing')).toBeTruthy();
-      http.expectOne('http://api/api/mcp-tools?refresh=true')
-        .flush({ servers: [server('a', [tool('a', 'new')], null, '2026-01-01T09:45:00Z')] });
+      http.expectOne('http://api/api/mcp-tools/servers/a?refresh=true')
+        .flush(server('a', [tool('a', 'new')], null, '2026-01-01T09:45:00Z'));
       fixture.detectChanges();
       expect(btn.disabled).toBe(false);
       expect(root().querySelector('.refreshing')).toBeNull();
@@ -128,7 +166,7 @@ describe('McpToolsPageComponent', () => {
       req.flush({ servers: [server('a', [tool('a', 'old')])] });
       fixture.detectChanges();
       (root().querySelector('.refresh') as HTMLButtonElement).click();
-      http.expectOne('http://api/api/mcp-tools?refresh=true').flush('x', { status: 500, statusText: 'err' });
+      http.expectOne('http://api/api/mcp-tools/servers/a?refresh=true').flush('x', { status: 500, statusText: 'err' });
       fixture.detectChanges();
       expect(root().querySelector('.tool')?.textContent?.trim()).toBe('old');
       expect(root().querySelector('.refresh-error')).toBeTruthy();

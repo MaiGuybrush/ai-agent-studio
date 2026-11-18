@@ -23,9 +23,9 @@ describe('McpToolsPageComponent deep link', () => {
     const fixture = TestBed.createComponent(McpToolsPageComponent);
     const http = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
-    http.expectOne('http://api/api/mcp-tools').flush({
-      servers: [{ id: 'gw', type: 'http', error: null, tools: [tool('get'), tool('put')] }],
-    });
+    http.expectOne('http://api/api/mcp-tools/servers').flush({ servers: [{ id: 'gw', type: 'http' }] });
+    http.expectOne('http://api/api/mcp-tools/servers/gw').flush(
+      { id: 'gw', type: 'http', fetchedAt: null, error: null, tools: [tool('get'), tool('put')] });
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
   }
