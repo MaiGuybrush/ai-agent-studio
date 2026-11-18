@@ -24,6 +24,9 @@ export interface McpServer {
   tools: McpTool[];
 }
 
+/** GET /api/mcp-tools/servers 的清單項目。 */
+export type McpServerId = { id: string; type: string };
+
 @Injectable({ providedIn: 'root' })
 export class McpToolsService {
   private readonly http = inject(HttpClient);
@@ -34,8 +37,8 @@ export class McpToolsService {
   }
 
   /** GET /api/mcp-tools/servers：只有 id、type，依設定檔順序。 */
-  listServers(): Observable<{ servers: { id: string; type: string }[] }> {
-    return this.http.get<{ servers: { id: string; type: string }[] }>(`${this.base}/api/mcp-tools/servers`);
+  listServers(): Observable<{ servers: McpServerId[] }> {
+    return this.http.get<{ servers: McpServerId[] }>(`${this.base}/api/mcp-tools/servers`);
   }
 
   /** GET /api/mcp-tools/servers/{id}：單一 server 的工具。 */
