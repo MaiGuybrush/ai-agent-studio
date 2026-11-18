@@ -193,6 +193,48 @@ describe('McpToolsPageComponent', () => {
     });
   });
 
+  describe('refresh edge cases', () => {
+    it('keeps old tools and flags refresh error when refresh returns 200 with an error field', () => {
+      const { fixture, req, root } = setup();
+      const http = TestBed.inject(HttpTestingController);
+      req.flush({ servers: [server('a', [tool('a', 'old')])] });
+      fixture.detectChanges();
+      (root().querySelector('.refresh') as HTMLButtonElement).click();
+      http.expectOne('http://api/api/mcp-tools/servers/a?refresh=true').flush(server('a', [], 'timeout', null));
+      fixture.detectChanges();
+      expect(root().querySelector('.tool')?.textContent?.trim()).toBe('old');
+      expect(root().querySelector('.server-error')).toBeNull();
+      expect(root().querySelector('.refresh-error')).toBeTruthy();
+    });
+
+    it('does not refetch servers that are still loading', () => {
+      const { fixture, listReq, http, root } = setup();
+      listReq.flush({ servers: [{ id: 'fast', type: 'http' }, { id: 'slow', type: 'http' }] });
+      http.expectOne('http://api/api/mcp-tools/servers/fast').flush(server('fast', [tool('fast', 'go')]));
+      const slow = http.expectOne('http://api/api/mcp-tools/servers/slow');
+      fixture.detectChanges();
+      (root().querySelector('.refresh') as HTMLButtonElement).click();
+      http.expectOne('http://api/api/mcp-tools/servers/fast?refresh=true').flush(server('fast', [tool('fast', 'go')]));
+      http.expectNone('http://api/api/mcp-tools/servers/slow?refresh=true');
+      slow.flush(server('slow', [tool('slow', 'x')]));
+    });
+
+    it('shows an overall error when every server failed', () => {
+      const { fixture, req, root } = setup();
+      req.flush({ servers: [server('a', [], 'down', null), server('b', [], 'down', null)] });
+      fixture.detectChanges();
+      expect(root().querySelector('.all-failed')?.textContent).toContain('所有 MCP server 都無法連線');
+      expect(root().querySelectorAll('.badge-error').length).toBe(2);
+    });
+
+    it('does not show the overall error when at least one server works', () => {
+      const { fixture, req, root } = setup();
+      req.flush({ servers: [server('a', [], 'down', null), server('b', [tool('b', 't')])] });
+      fixture.detectChanges();
+      expect(root().querySelector('.all-failed')).toBeNull();
+    });
+  });
+
   describe('search while loading', () => {
     it('keeps loading blocks visible and does not claim no results until every block has loaded', () => {
       const { fixture, listReq, http, root } = setup();

@@ -43,6 +43,9 @@ const byName = (a: McpTool, b: McpTool) =>
         @if (list.length === 0) {
           <p class="empty text-sm text-slate-500">目前沒有任何 MCP server。</p>
         } @else {
+          @if (allFailed()) {
+            <p class="all-failed text-sm text-red-600">所有 MCP server 都無法連線，請檢查設定或稍後再試。</p>
+          }
           <div class="flex gap-4">
             <!-- 左側清單 -->
             <nav class="list w-80 shrink-0 space-y-4">
@@ -117,6 +120,11 @@ export class McpToolsPageComponent {
       .filter((s) => s.loading || s.tools.length > 0); // 載入中的區塊保留，載入完才依結果收起
   });
   readonly anyLoading = computed(() => (this.servers() ?? []).some((s) => s.loading));
+  /** 全部 server 都載入完且都失敗。 */
+  readonly allFailed = computed(() => {
+    const l = this.servers() ?? [];
+    return l.length > 0 && l.every((s) => !s.loading && s.error);
+  });
   readonly selected = signal<McpTool | null>(null);
 
   readonly refreshing = signal(false);
@@ -156,7 +164,7 @@ export class McpToolsPageComponent {
       next: (r) => {
         this.servers.set(r.servers.map((s) => ({ id: s.id, type: s.type, fetchedAt: null, error: null, tools: [], loading: true })));
         r.servers.forEach((s) => this.svc.getServer(s.id).subscribe({
-          next: (d) => this.patch(s.id, this.sorted([d])[0]),
+          next: (d) => this.patch(s.id, this.sortedOne(d)),
           error: () => this.patch(s.id, failed(s.id, s.type)),
         }));
       },
@@ -168,15 +176,15 @@ export class McpToolsPageComponent {
     this.servers.update((l) => l?.map((x) => (x.id === id ? v : x)) ?? null);
   }
 
-  private sorted = (l: McpServer[]) => l.map((s) => ({ ...s, tools: [...s.tools].sort(byName) }));
+  private sortedOne = (s: McpServer) => ({ ...s, tools: [...s.tools].sort(byName) });
 
   refresh() {
-    const list = this.servers() ?? [];
+    const list = (this.servers() ?? []).filter((s) => !s.loading); // 載入中的已有請求在跑
     this.refreshing.set(true);
     this.refreshError.set(false);
     let bad = false;
     forkJoin(list.map((s) => this.svc.getServer(s.id, true).pipe(
-      map((d) => this.patch(s.id, this.sorted([d])[0])),
+      map((d) => (d.error ? (bad = true) : this.patch(s.id, this.sortedOne(d)))), // 200 帶 error 視同失敗，保留舊資料
       catchError(() => { bad = true; return of(null); }), // 失敗的 server 保留舊資料
     ))).subscribe({ complete: () => { this.refreshError.set(bad); this.refreshing.set(false); } });
   }
