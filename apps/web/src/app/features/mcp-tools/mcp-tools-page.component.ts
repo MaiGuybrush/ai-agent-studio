@@ -2,7 +2,7 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DatePipe } from '@angular/common';
-import { map } from 'rxjs';
+import { map, forkJoin, of, catchError } from 'rxjs';
 import { McpServer, McpTool, McpToolsService } from '../../core/mcp-tools/mcp-tools.service';
 import { McpToolDetailComponent } from './mcp-tool-detail.component';
 
@@ -15,6 +15,12 @@ const fieldNames = (schema: unknown): string[] => {
     ...fieldNames(s.items),
   ];
 };
+
+/** loading 為 true 時尚未取得該 server 的工具。 */
+type ServerView = McpServer & { loading?: boolean };
+
+const failed = (id: string, type: string): ServerView =>
+  ({ id, type, fetchedAt: null, error: '無法連線', tools: [] });
 
 const byName = (a: McpTool, b: McpTool) =>
   a.name.toLowerCase().localeCompare(b.name.toLowerCase());
@@ -37,12 +43,15 @@ const byName = (a: McpTool, b: McpTool) =>
         @if (list.length === 0) {
           <p class="empty text-sm text-slate-500">目前沒有任何 MCP server。</p>
         } @else {
+          @if (allFailed()) {
+            <p class="all-failed text-sm text-red-600">所有 MCP server 都無法連線，請檢查設定或稍後再試。</p>
+          }
           <div class="flex gap-4">
             <!-- 左側清單 -->
             <nav class="list w-80 shrink-0 space-y-4">
               <input type="search" class="search w-full border rounded px-2 py-1" placeholder="搜尋工具、欄位…"
                 [value]="query()" (input)="query.set($any($event.target).value)" />
-              @if (query().trim() && visible().length === 0) {
+              @if (query().trim() && visible().length === 0 && !anyLoading()) {
                 <p class="no-results text-sm text-slate-500">找不到符合「{{ query().trim() }}」的工具。</p>
               }
               @for (s of visible(); track s.id) {
@@ -57,6 +66,9 @@ const byName = (a: McpTool, b: McpTool) =>
                     <p class="server-error text-sm text-red-600">
                       <span class="badge-error px-2 rounded bg-red-100">無法連線</span> {{ s.error }}
                     </p>
+                  }
+                  @if (s.loading) {
+                    <p class="server-loading text-sm text-slate-500">載入中…</p>
                   }
                   <ul>
                     @for (t of s.tools; track t.qualifiedName) {
@@ -88,7 +100,7 @@ const byName = (a: McpTool, b: McpTool) =>
 export class McpToolsPageComponent {
   private readonly svc = inject(McpToolsService);
   /** 已依工具名稱（不分大小寫）排序；server 維持後端給的設定檔順序。 */
-  readonly servers = signal<McpServer[] | null>(null);
+  readonly servers = signal<ServerView[] | null>(null);
   readonly error = signal<string | null>(null);
   readonly query = signal('');
   /** 依搜尋字串過濾；無符合工具的 server 整組收起。 */
@@ -105,7 +117,13 @@ export class McpToolsPageComponent {
           : s.tools.filter((t) =>
               [t.name, t.description ?? '', ...fieldNames(t.inputSchema), ...fieldNames(t.outputSchema)].some(has)),
       }))
-      .filter((s) => s.tools.length > 0);
+      .filter((s) => s.loading || s.tools.length > 0); // 載入中的區塊保留，載入完才依結果收起
+  });
+  readonly anyLoading = computed(() => (this.servers() ?? []).some((s) => s.loading));
+  /** 全部 server 都載入完且都失敗。 */
+  readonly allFailed = computed(() => {
+    const l = this.servers() ?? [];
+    return l.length > 0 && l.every((s) => !s.loading && s.error);
   });
   readonly selected = signal<McpTool | null>(null);
 
@@ -125,7 +143,12 @@ export class McpToolsPageComponent {
     const s = this.servers()?.find((x) => x.id === t?.server);
     return s?.tools.find((x) => x.name === t?.tool) ?? null;
   });
-  readonly notFound = computed(() => this.target() !== null && this.servers() !== null && this.match() === null);
+  readonly notFound = computed(() => {
+    const t = this.target();
+    if (!t || this.servers() === null || this.match()) return false;
+    const s = this.servers()!.find((x) => x.id === t.server);
+    return !s || !s.loading; // server 還在載入時先不判定找不到
+  });
 
   pick(s: McpServer, t: McpTool) {
     this.selected.set(t);
@@ -137,20 +160,32 @@ export class McpToolsPageComponent {
       const m = this.match();
       if (m) this.selected.set(m);
     });
-    this.svc.list().subscribe({
-      next: (r) => this.servers.set(this.sorted(r.servers)),
+    this.svc.listServers().subscribe({
+      next: (r) => {
+        this.servers.set(r.servers.map((s) => ({ id: s.id, type: s.type, fetchedAt: null, error: null, tools: [], loading: true })));
+        r.servers.forEach((s) => this.svc.getServer(s.id).subscribe({
+          next: (d) => this.patch(s.id, this.sortedOne(d)),
+          error: () => this.patch(s.id, failed(s.id, s.type)),
+        }));
+      },
       error: () => this.error.set('無法載入 MCP Tool Catalog，請稍後再試。'),
     });
   }
 
-  private sorted = (l: McpServer[]) => l.map((s) => ({ ...s, tools: [...s.tools].sort(byName) }));
+  private patch(id: string, v: ServerView) {
+    this.servers.update((l) => l?.map((x) => (x.id === id ? v : x)) ?? null);
+  }
+
+  private sortedOne = (s: McpServer) => ({ ...s, tools: [...s.tools].sort(byName) });
 
   refresh() {
+    const list = (this.servers() ?? []).filter((s) => !s.loading); // 載入中的已有請求在跑
     this.refreshing.set(true);
     this.refreshError.set(false);
-    this.svc.list(true).subscribe({
-      next: (r) => { this.servers.set(this.sorted(r.servers)); this.refreshing.set(false); },
-      error: () => { this.refreshError.set(true); this.refreshing.set(false); },
-    });
+    let bad = false;
+    forkJoin(list.map((s) => this.svc.getServer(s.id, true).pipe(
+      map((d) => (d.error ? (bad = true) : this.patch(s.id, this.sortedOne(d)))), // 200 帶 error 視同失敗，保留舊資料
+      catchError(() => { bad = true; return of(null); }), // 失敗的 server 保留舊資料
+    ))).subscribe({ complete: () => { this.refreshError.set(bad); this.refreshing.set(false); } });
   }
 }
