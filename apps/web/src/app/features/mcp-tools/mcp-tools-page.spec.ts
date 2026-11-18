@@ -174,6 +174,43 @@ describe('McpToolsPageComponent', () => {
     });
   });
 
+  describe('refresh independence', () => {
+    it('updates each server on its own; a failed one keeps its old data and flags the error', () => {
+      const { fixture, req, root } = setup();
+      const http = TestBed.inject(HttpTestingController);
+      req.flush({ servers: [server('a', [tool('a', 'oldA')]), server('b', [tool('b', 'oldB')])] });
+      fixture.detectChanges();
+      (root().querySelector('.refresh') as HTMLButtonElement).click();
+      http.expectOne('http://api/api/mcp-tools/servers/a?refresh=true').flush(server('a', [tool('a', 'newA')]));
+      fixture.detectChanges();
+      expect([...root().querySelectorAll('.tool')].map((e) => e.textContent?.trim())).toEqual(['newA', 'oldB']);
+      expect(root().querySelector('.refreshing')).toBeTruthy(); // b 還沒回
+      http.expectOne('http://api/api/mcp-tools/servers/b?refresh=true').flush('x', { status: 500, statusText: 'err' });
+      fixture.detectChanges();
+      expect([...root().querySelectorAll('.tool')].map((e) => e.textContent?.trim())).toEqual(['newA', 'oldB']);
+      expect(root().querySelector('.refresh-error')).toBeTruthy();
+      expect(root().querySelector('.refreshing')).toBeNull();
+    });
+  });
+
+  describe('search while loading', () => {
+    it('keeps loading blocks visible and does not claim no results until every block has loaded', () => {
+      const { fixture, listReq, http, root } = setup();
+      listReq.flush({ servers: [{ id: 'fast', type: 'http' }, { id: 'slow', type: 'http' }] });
+      http.expectOne('http://api/api/mcp-tools/servers/fast').flush(server('fast', [tool('fast', 'go')]));
+      fixture.detectChanges();
+      const el = root().querySelector('input.search') as HTMLInputElement;
+      el.value = 'zzz';
+      el.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      expect(root().querySelector('.no-results')).toBeNull();
+      expect(root().querySelectorAll('.server .server-loading').length).toBe(1);
+      http.expectOne('http://api/api/mcp-tools/servers/slow').flush(server('slow', [tool('slow', 'run')]));
+      fixture.detectChanges();
+      expect(root().querySelector('.no-results')).toBeTruthy();
+    });
+  });
+
   describe('search', () => {
     const load = () => {
       const { fixture, req, root } = setup();

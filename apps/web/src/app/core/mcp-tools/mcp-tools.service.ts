@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ConfigService } from '../config/config.service';
 
-/** GET /api/mcp-tools 的工具項目。 */
+/** GET /api/mcp-tools/servers/{id} 的工具項目。 */
 export interface McpTool {
   name: string;
   /** `server__tool` */
@@ -24,10 +24,6 @@ export interface McpServer {
   tools: McpTool[];
 }
 
-export interface McpToolsResponse {
-  servers: McpServer[];
-}
-
 @Injectable({ providedIn: 'root' })
 export class McpToolsService {
   private readonly http = inject(HttpClient);
@@ -45,10 +41,5 @@ export class McpToolsService {
   /** GET /api/mcp-tools/servers/{id}：單一 server 的工具。 */
   getServer(id: string, refresh = false): Observable<McpServer> {
     return this.http.get<McpServer>(`${this.base}/api/mcp-tools/servers/${encodeURIComponent(id)}`, refresh ? { params: { refresh: true } } : {});
-  }
-
-  list(refresh = false): Observable<McpToolsResponse> {
-    const base = this.config.normalizeUrl(String(this.config.config()['apiBaseUrl'] ?? ''));
-    return this.http.get<McpToolsResponse>(`${base}/api/mcp-tools`, refresh ? { params: { refresh: true } } : {});
   }
 }
