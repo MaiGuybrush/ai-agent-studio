@@ -19,6 +19,8 @@ public class TicketPostgresTests
         await using var db = new StudioDb(opt);
         await db.Database.MigrateAsync();
         var id = "PG-" + Guid.NewGuid().ToString("N")[..8];
+        try
+        {
         db.Tickets.Add(new RequirementTicket { Id = id, Description = "d", CimEngineerEmpNo = "1", CimEngineerName = "a", BusinessUserEmpNo = "2", BusinessUserName = "b", CreatedAt = DateTimeOffset.UtcNow });
         db.TicketEvents.Add(new TicketEvent { TicketId = id, Type = "Cancel", ActorEmpNo = "1", At = DateTimeOffset.UtcNow });
         db.PendingTerms.Add(new AiAgentStudio.Api.Vocabulary.PendingTerm { Term = "t-" + id, Explanation = "e", AliasesJson = "[\"a\"]", TicketId = id, GiteaIssueNumber = 1, GiteaIssueUrl = "u", ConfirmedByEmpNo = "1", CreatedAt = DateTimeOffset.UtcNow });
@@ -31,5 +33,17 @@ public class TicketPostgresTests
         Assert.Single(db2.TicketEvents.Where(e => e.TicketId == id));
         Assert.Equal("Pending", (await db2.ToolSpecRecords.SingleAsync(x => x.TicketId == id)).State);
         Assert.Equal("Pending", (await db2.PendingTerms.SingleAsync(x => x.TicketId == id)).Status);
+        }
+        finally
+        {
+            // 清掉本次測試寫進真 DB 的資料，避免累積 PG-xxxxxxxx 殘留（無 FK，逐表刪）
+            await using var cleanup = new StudioDb(opt);
+            await cleanup.PendingTerms.Where(x => x.TicketId == id).ExecuteDeleteAsync();
+            await cleanup.ToolSpecRecords.Where(x => x.TicketId == id).ExecuteDeleteAsync();
+            await cleanup.ToolSpecRevisions.Where(x => x.TicketId == id).ExecuteDeleteAsync();
+            await cleanup.Submissions.Where(x => x.TicketId == id).ExecuteDeleteAsync();
+            await cleanup.TicketEvents.Where(x => x.TicketId == id).ExecuteDeleteAsync();
+            await cleanup.Tickets.Where(x => x.Id == id).ExecuteDeleteAsync();
+        }
     }
 }
